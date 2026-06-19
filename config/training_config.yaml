@@ -1,0 +1,92 @@
+# Stage 1: pretraining defaults. Different models come from presets
+# (config/presets/*.yaml) and --set overrides, merged over this file:
+#   base config < preset < --set   (see scripts/pretrain.py)
+
+run_name: null            # auto: run-{YYYYmmdd-HHMMSS}
+seed: 42
+device: cuda              # cuda | cpu
+out_dir: checkpoints/pretrain
+tokenizer_dir: checkpoints/tokenizer
+tokenizer_prefix: spm
+
+model:
+  vocab_size: 16000       # floor; raised to the tokenizer's vocab if larger
+  d_model: 896
+  n_layers: 14
+  n_heads: 14             # head_dim = 64
+  n_kv_heads: null        # null = MHA; 1 = MQA; divisor of n_heads = GQA
+  intermediate_size: 2400 # SwiGLU width, ~2.68x d_model
+  mlp_type: swiglu        # swiglu | geglu | gelu
+  norm_type: rmsnorm      # rmsnorm | layernorm
+  qk_norm: false          # RMSNorm on q/k heads; cheap stability at scale
+  max_seq_len: 1024
+  rope_theta: 10000.0
+  rope_scaling: {}        # e.g. {type: ntk, factor: 2.0} for context extension
+  sliding_window: null    # tokens of lookback per position; null = full
+  dropout: 0.1
+  norm_eps: 1.0e-5
+  init_std: 0.02
+  tie_embeddings: true
+  gradient_checkpointing: false  # enable when scaling up to save VRAM
+  n_experts: 0            # >0 turns every FFN into a top-k routed MoE
+  moe_top_k: 2
+  moe_aux_weight: 0.01
+
+training:
+  max_steps: 12000
+  batch_size: 16          # sequences per micro-batch (per forward pass)
+  grad_accum_steps: 2     # effective batch = 32 seqs = 32,768 tokens/step
+  optimizer: adamw        # adamw | muon | lion
+  lr: 6.0e-4              # adamw/lion; under muon this is the non-2D group LR
+  muon_lr: 0.02           # muon group (2D hidden weights) only
+  muon_momentum: 0.95
+  schedule: cosine        # cosine | wsd | linear | constant
+  warmup_steps: 300
+  min_lr_fraction: 0.1    # floor as a fraction of peak
+  wsd_decay_fraction: 0.2 # wsd only: final fraction of steps spent decaying
+  weight_decay: 0.01      # matmul weights only, not norms/embeddings
+  betas: [0.9, 0.95]
+  eps: 1.0e-8
+  grad_clip: 1.0
+  precision: bf16         # autocast bf16, fp32 master weights
+  compile: false          # torch.compile: ~20-30% faster, Linux/WSL realistically
+
+objectives:
+  # Objective sampled per micro-batch (mixture-of-denoisers style): equivalent
+  # in expectation to 0.8/0.2 loss weighting without contaminating the causal
+  # objective with corrupted inputs in the same pass.
+  causal_lm_prob: 0.8
+  span_corruption_prob: 0.2
+  span_mask_ratio: 0.15
+  span_mean_length: 3
+
+evaluation:
+  eval_interval: 500      # val loss + perplexity, total and per-source
+  val_batches: 40
+  ood_eval_interval: 1000 # OOD samples (data_config ood_files), if present
+
+sampling:
+  sample_interval: 2000
+  max_new_tokens: 150
+  temperature: 0.7
+  top_p: 0.9
+  prompts:
+    - "Once upon a time"
+    - "The meaning of"
+    - "<|prompt|> Explain gravity in one sentence. <|response|>"
+
+checkpoint:
+  save_interval: 500
+  keep_last: 5            # plus best.pt, kept forever
+
+early_stopping:
+  enabled: true
+  patience: 6             # 6 evals without val improvement -> stop
+
+logging:
+  log_interval: 20
+  csv_path: logs/metrics.csv
+  samples_dir: logs/samples
+  wandb:
+    enabled: false        # opt-in with --wandb; local CSV logging is always on
+    project: lloom

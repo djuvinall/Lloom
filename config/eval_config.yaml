@@ -1,0 +1,25 @@
+# Stage 4: standalone evaluation of any checkpoint.
+checkpoint: checkpoints/pretrain/best.pt
+tokenizer_dir: checkpoints/tokenizer
+tokenizer_prefix: spm
+device: cuda
+batch_size: 16
+seq_len: 1024
+
+perplexity:
+  enabled: true
+  per_source: true
+  ood: true               # uses data_config ood_files if present
+
+retrieval:                # MRR / NDCG@k over embedding similarity
+  enabled: true           # runs iff data/sft/retrieval_pairs.jsonl exists
+  k: 10                   # {"query": ..., "positive": ...} per line
+
+qa:                       # generation dump for human rating
+  enabled: true           # runs iff data/sft/*.jsonl exist
+  max_pairs: 300
+  max_new_tokens: 150
+
+clustering:               # kmeans + silhouette / Davies-Bouldin / NMI
+  enabled: true           # runs iff data/sft/themed.jsonl exists
+                          # {"text": ..., "theme": ...} per line

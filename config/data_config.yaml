@@ -1,0 +1,34 @@
+# Pretraining data: sources + preprocessing + curriculum weighting.
+#
+# Each source is a plain-text file data/raw/{name}.txt. Blank lines separate
+# documents (prepare_data.py also accepts one document per line). Only sources
+# whose file exists are used; curriculum weights renormalize over what's present.
+
+raw_dir: data/raw
+text_dir: data/processed/text     # normalized text (documents split by <|endoftext|>)
+tokens_dir: data/processed/tokens # uint16 .npy token streams per source/split
+ood_dir: data/ood
+sft_dir: data/sft
+
+# `tier` drives curriculum weighting below. Add as many sources/domains as you
+# like; group related ones into the same tier.
+sources:
+  - {name: sample, tier: top}
+  # - {name: domain_a, tier: top}
+  # - {name: domain_b, tier: mid}
+  # - {name: domain_c, tier: rest}
+
+split:
+  val_fraction: 0.10   # held out at document granularity
+  seed: 42
+
+# Curriculum phases as fractions of max_steps. Weights are per-TIER totals,
+# split equally among sources present in that tier. "uniform" = equal/source.
+curriculum:
+  phases:
+    - {until: 0.3, weights: {top: 0.6, mid: 0.3, rest: 0.1}}
+    - {until: 0.7, weights: {top: 0.4, mid: 0.4, rest: 0.2}}
+    - {until: 1.0, weights: uniform}
+  divergence_alert: 0.05   # warn if realized source mix drifts > this from target
+
+ood_files: []   # optional held-out text files in data/ood/ for OOD perplexity

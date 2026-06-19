@@ -9,10 +9,13 @@ venv/
 build/
 dist/
 
-# Data (project-supplied; processed artifacts are rebuildable)
-data/raw/
+# Data: ignore corpora + generated artifacts, but keep the committed samples
+data/raw/*
+!data/raw/sample.txt
 data/processed/
 data/ood/
+data/sft/*
+!data/sft/sample.jsonl
 
 # Run outputs
 checkpoints/

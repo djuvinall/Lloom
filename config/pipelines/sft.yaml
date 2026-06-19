@@ -1,0 +1,9 @@
+# Post-pretraining: LoRA instruction-tune on prompt/response pairs, then eval.
+# Swap finetune_sft_lora.py for finetune_sft_full.py for a full finetune.
+name: sft
+stages:
+  - name: finetune_lora
+    cmd: [scripts/finetune_sft_lora.py]
+    pass_overrides: true
+  - name: evaluate
+    cmd: [scripts/evaluate.py, --checkpoint, checkpoints/sft_lora/merged.pt]

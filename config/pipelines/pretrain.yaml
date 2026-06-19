@@ -1,0 +1,21 @@
+# Data -> tokenizer -> streams -> pretrain -> eval, one command:
+#   python scripts/run_pipeline.py --pipeline config/pipelines/pretrain.yaml
+# Different model, same pipeline:
+#   ... --preset large --set training.optimizer=muon
+# Resume after a failure: ... --from pretrain
+name: pretrain
+stages:
+  - name: prepare_data
+    cmd: [scripts/prepare_data.py]
+    skip_if: data/processed/text/sample.txt
+  - name: train_tokenizer
+    cmd: [scripts/train_tokenizer.py]
+    skip_if: checkpoints/tokenizer/spm.model
+  - name: tokenize_dataset
+    cmd: [scripts/tokenize_dataset.py]
+    skip_if: data/processed/tokens/train_sample.npy
+  - name: pretrain
+    cmd: [scripts/pretrain.py]
+    pass_overrides: true
+  - name: evaluate
+    cmd: [scripts/evaluate.py, --checkpoint, checkpoints/pretrain/best.pt]

@@ -2,7 +2,7 @@
 
 A config-driven, project-agnostic framework for training language models from scratch in pure PyTorch. One transformer implementation, one set of trainers, driven entirely by YAML — "a different model" means "a different config", not different code.
 
-Lloom supplies the machinery: model zoo, data pipeline, tokenizer, trainers, finetuning, inference, eval, quantization, and pipeline automation. A *project* supplies the YAML configs, data, and thin CLI scripts that wire it to a specific corpus. Nothing in `lloom/` knows about any particular dataset.
+Lloom supplies the machinery: model zoo, data pipeline, tokenizer, trainers, finetuning, inference, eval, quantization, and pipeline automation. It ships with a small, generic reference project (`textlm/` + `scripts/` + `config/`) so you can train end-to-end out of the box and adapt it to any corpus. Nothing in `lloom/` itself knows about any particular dataset.
 
 Importing `lloom` pulls in no torch; the heavy subpackages (`lloom.model`, `lloom.train`, ...) are imported explicitly.
 
@@ -46,7 +46,7 @@ Blackwell GPUs (RTX 50-series) need a CUDA 12.8+ torch build:
 pip install torch --index-url https://download.pytorch.org/whl/cu128
 ```
 
-## Quickstart
+## Quickstart (library)
 
 ```python
 import torch
@@ -67,6 +67,36 @@ cfg = ModelConfig(d_model=384, n_layers=6, n_heads=6, n_kv_heads=2,
                   n_experts=8, moe_top_k=2, sliding_window=256)
 ```
 
+## Train a model end-to-end
+
+The bundled `textlm` project wires a corpus to lloom through thin CLI scripts. Drop one `.txt` per source into `data/raw/` (a `sample.txt` is included), then run the whole pretraining pipeline:
+
+```bash
+python scripts/run_pipeline.py --pipeline config/pipelines/pretrain.yaml
+# different model, same pipeline:
+python scripts/run_pipeline.py --pipeline config/pipelines/pretrain.yaml --preset large --set training.optimizer=muon
+```
+
+Or run the stages by hand:
+
+```bash
+python scripts/prepare_data.py        # data/raw/*.txt -> normalized text
+python scripts/train_tokenizer.py     # SentencePiece tokenizer
+python scripts/tokenize_dataset.py    # -> uint16 token streams (train/val)
+python scripts/pretrain.py            # add --preset nano for a quick CPU smoke test
+python scripts/evaluate.py --checkpoint checkpoints/pretrain/best.pt
+```
+
+Instruction-tune on `data/sft/*.jsonl` (`{"prompt": ..., "response": ...}`; a `sample.jsonl` is included), then serve or package:
+
+```bash
+python scripts/finetune_sft_lora.py                 # or finetune_sft_full.py
+python scripts/serve.py --checkpoint checkpoints/sft_lora/merged.pt
+python scripts/quantize.py --checkpoint checkpoints/pretrain/best.pt   # int8 + safetensors
+```
+
+Note: set `tokenizer_config.yaml`'s `vocab_size` to suit your corpus — SentencePiece errors if it's too high for the available text, so lower it for small datasets.
+
 ## Config system
 
 Models are defined in YAML and merged in this order (later wins):
@@ -75,11 +105,11 @@ Models are defined in YAML and merged in this order (later wins):
 base config   <   preset   <   --set overrides
 ```
 
-Presets are partial YAMLs (usually a `model:` block plus a few training tweaks) that layer over a base training config your project supplies. Overrides handle one-off tweaks without editing files. `save_snapshot` writes the fully resolved config beside each run for reproducibility.
+Presets are partial YAMLs (usually a `model:` block plus a few training tweaks) that layer over a base training config. Overrides handle one-off tweaks without editing files. `save_snapshot` writes the fully resolved config beside each run for reproducibility.
 
 ```python
 from lloom.config import load_config
-cfg = load_config("config/training_config.yaml",   # your project's base config
+cfg = load_config("config/training_config.yaml",
                   preset="large",                   # bare name -> config/presets/large.yaml
                   sets=["training.optimizer=muon", "model.n_layers=24"])
 ```
@@ -97,22 +127,21 @@ cfg = load_config("config/training_config.yaml",   # your project's base config
 
 Presets are partial overlays: they set model dims (and a few training knobs) and merge over your base config.
 
-## Package layout
+## Repository layout
 
 ```
-lloom/
-  config.py        config merge, dot-access, --set overrides, run snapshot
-  model/           ModelConfig + transformer (attention, rope, layers, moe)
-  data/            memmap token streams, mixture sampling, SFT packing
-  tokenizer/       SentencePiece wrapper
-  train/           Trainer, SFTTrainer, optimizers, schedules, objectives
-  finetune/        LoRA
-  infer/           generate (KV-cache), checkpoint I/O, FastAPI server
-  quant/           dynamic int8
-  eval/            perplexity, embed, retrieval, clustering, Evaluator
-  pipeline.py      YAML stage runner
-config/presets/    model-size presets (nano ... xl, moe)
-tests/             test_lloom.py - every subsystem on synthetic data, CPU, < 1 min
+lloom/              the framework (import lloom) - see Features above
+config/
+  training_config.yaml  data_config.yaml  sft_config.yaml
+  eval_config.yaml      tokenizer_config.yaml
+  presets/            model-size presets (nano ... xl, moe)
+  pipelines/          multi-stage recipes (pretrain, sft, release)
+scripts/            thin CLI entry points, Stages 0-5 (depend only on lloom + textlm)
+textlm/             project layer: data prep (prep.py) + SFT templating (sft.py)
+data/
+  raw/              source text, one .txt per source (sample.txt included)
+  sft/              instruction data, *.jsonl (sample.jsonl included)
+tests/              test_lloom.py - framework subsystems on synthetic data, CPU, < 1 min
 ```
 
 ## Tests
@@ -123,9 +152,11 @@ python tests/test_lloom.py     # or: pytest
 
 Exercises every subsystem on synthetic data with no corpus or tokenizer training — CPU, under a minute.
 
-## What's not included
+## Adapt it to your own data
 
-Lloom is the framework, not a project. To train on real data you supply:
+`lloom/` is the framework and stays untouched; the project lives in `textlm/` + `config/` + `data/`:
 
-- a base training config (e.g. `config/training_config.yaml`) for presets to layer over, plus data / tokenizer / eval configs
-- thin CLI scripts (`prepare_data.py`, `pretrain.py`, ...) that wire your corpus to lloom; the `lloom.pipeline` docstring shows the recipe format
+- Put your corpus in `data/raw/<source>.txt` and list the sources (with curriculum `tier`s) in `config/data_config.yaml`.
+- Put instruction data in `data/sft/*.jsonl` as `{"prompt": ..., "response": ...}` (aliases `instruction`/`input` and `output`/`answer` are accepted).
+- Customize `textlm/prep.py` (text normalization / document splitting) and `textlm/sft.py` (prompt template) for your domain. The scripts and `lloom` don't change.
+- Match `tokenizer_config.yaml`'s `vocab_size` to your corpus size.

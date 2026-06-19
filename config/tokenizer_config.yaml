@@ -1,0 +1,21 @@
+# Stage 0: SentencePiece tokenizer. Train AFTER prepare_data.py.
+input_dir: data/processed/text
+model_dir: checkpoints/tokenizer
+model_prefix: spm
+vocab_size: 16000           # must suit your corpus: SPM errors if it's too high
+                            # for the available text. Lower it for small datasets.
+model_type: bpe             # bpe | unigram | char | word
+character_coverage: 0.9995  # use 1.0 for large-charset languages (CJK)
+byte_fallback: true         # unseen chars degrade to bytes, never <unk>
+seed: 42
+
+# Dedicated vocab ids via SentencePiece user_defined_symbols.
+special_tokens:
+  - "<|endoftext|>"
+  - "<|pad|>"
+  - "<|mask|>"        # span-corruption sentinel
+  - "<|prompt|>"      # SFT: prompt marker
+  - "<|response|>"    # SFT: response trigger
+
+# Extra reserved slots so future task tokens don't force a tokenizer retrain.
+reserved_token_slots: 8

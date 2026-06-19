@@ -1,0 +1,6 @@
+# Package a trained checkpoint: int8 quantize + safetensors export.
+name: release
+stages:
+  - name: quantize
+    cmd: [scripts/quantize.py, --checkpoint, checkpoints/pretrain/best.pt]
+    pass_overrides: true

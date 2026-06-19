@@ -1,0 +1,56 @@
+# Stages 2 (LoRA) + 3 (full finetune) on prompt/response pairs.
+# Data: data/sft/*.jsonl with {"prompt": ..., "response": ...}
+# (aliases accepted: instruction/input -> prompt, output/answer -> response).
+# LoRA uses `training:` as-is; full finetune deep-merges `full.training:` over it.
+
+seed: 42
+device: cuda
+base_checkpoint: checkpoints/pretrain/best.pt
+tokenizer_dir: checkpoints/tokenizer
+tokenizer_prefix: spm
+sft_dir: data/sft
+val_fraction: 0.1
+lora_out_dir: checkpoints/sft_lora
+full_out_dir: checkpoints/sft_full
+
+lora:
+  r: 32
+  alpha: 64
+  dropout: 0.05
+  targets: [q_proj, k_proj, v_proj, o_proj, gate, up, down]
+
+training:
+  epochs: 3
+  max_steps: null         # null = epochs * batches; set to pin exactly
+  batch_size: 8           # packed rows per step (each row = max_seq_len tokens)
+  grad_accum_steps: 1
+  optimizer: adamw
+  lr: 1.0e-4              # LoRA LR (adapters tolerate ~10x full-FT LR)
+  schedule: cosine
+  warmup_steps: 50
+  min_lr_fraction: 0.1
+  weight_decay: 0.0
+  betas: [0.9, 0.95]
+  eps: 1.0e-8
+  grad_clip: 1.0
+  precision: bf16
+
+full:
+  training:
+    lr: 1.0e-5            # all weights move: keep it gentle
+    epochs: 2
+    weight_decay: 0.01
+
+evaluation:
+  eval_interval: 50
+
+early_stopping:
+  enabled: true
+  patience: 4
+
+logging:
+  log_interval: 10
+  csv_path: logs/sft_metrics.csv
+  wandb:
+    enabled: false
+    project: lloom
