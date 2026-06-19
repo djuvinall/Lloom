@@ -1,0 +1,15 @@
+# ~40M params (d512/L10/H8, SwiGLU 1408); embedding size scales with your vocab.
+# Non-embedding params (~32M) dominate, so the model leans on generalization
+# over memorization on small corpora. Merged over your base training config.
+model:
+  d_model: 512
+  n_layers: 10
+  n_heads: 8                # head_dim 64
+  intermediate_size: 1408   # ~2.75x d_model
+
+training:
+  batch_size: 48
+  grad_accum_steps: 1       # effective batch 48 seqs = 49,152 tokens/step
+  max_steps: 8000           # early stopping still armed
+  warmup_steps: 200
+  lr: 8.0e-4

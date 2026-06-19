@@ -1,0 +1,15 @@
+# ~73M total / ~30M active params: nano dims with 8 SwiGLU experts, top-2
+# routing. The runnable MoE config for a 16GB card - demonstrates sparse
+# scaling (8x FFN capacity at ~2x FFN compute) without blowing past VRAM.
+model:
+  d_model: 384
+  n_layers: 6
+  n_heads: 6
+  intermediate_size: 1024
+  n_experts: 8
+  moe_top_k: 2
+  moe_aux_weight: 0.01
+training:
+  batch_size: 32
+  grad_accum_steps: 1
+  lr: 8.0e-4

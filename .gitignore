@@ -1,0 +1,21 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# Packaging
+*.egg-info/
+build/
+dist/
+
+# Data (project-supplied; processed artifacts are rebuildable)
+data/raw/
+data/processed/
+data/ood/
+
+# Run outputs
+checkpoints/
+logs/
+wandb/
+nohup.out

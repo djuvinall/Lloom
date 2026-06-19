@@ -1,0 +1,17 @@
+# ~454M params (d1280/L24/H20, GQA kv4, SwiGLU 3456). Fits a 16GB card with
+# gradient checkpointing; Muon trims optimizer state vs AdamW (~7.3 vs ~5.6GB
+# states+grads+weights). Corpus check: at a ~400M-token budget this is
+# already past compute-optimal - expect early stopping to fire.
+model:
+  d_model: 1280
+  n_layers: 24
+  n_heads: 20             # head_dim 64
+  n_kv_heads: 4           # GQA 5:1
+  intermediate_size: 3456
+  qk_norm: true
+  gradient_checkpointing: true
+training:
+  batch_size: 8
+  grad_accum_steps: 8     # effective 64 seqs
+  lr: 3.0e-4
+  optimizer: muon

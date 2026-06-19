@@ -1,0 +1,18 @@
+# Runtime dependencies for lloom. Canonical source is pyproject.toml;
+# this mirrors it for `pip install -r requirements.txt` convenience.
+#
+# NVIDIA Blackwell (RTX 50-series) needs a CUDA 12.8+ torch build:
+#   pip install torch --index-url https://download.pytorch.org/whl/cu128
+torch>=2.5.0
+numpy>=1.26
+pyyaml>=6.0
+sentencepiece>=0.2.0
+safetensors>=0.4
+tqdm>=4.66
+
+# Optional - training-run logging (set logging.wandb.enabled: false to skip)
+wandb>=0.17
+
+# Optional - inference server (lloom/infer/server.py); install via ".[serve]"
+# fastapi>=0.110
+# uvicorn>=0.29

@@ -1,0 +1,11 @@
+# ~23M params (d384/L6/H6, SwiGLU 1024). Debugging & fast iteration: full
+# pipeline shakedown in minutes. Merged over your base training config.
+model:
+  d_model: 384
+  n_layers: 6
+  n_heads: 6              # head_dim 64
+  intermediate_size: 1024
+training:
+  batch_size: 64
+  grad_accum_steps: 1
+  lr: 1.0e-3

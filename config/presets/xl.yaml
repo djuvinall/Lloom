@@ -1,0 +1,18 @@
+# ~1.06B params (d2048/L22/H16 hd128, GQA kv4, SwiGLU 5632). BORDERLINE on
+# 16GB: requires muon + gradient checkpointing + this batch size; AdamW will
+# OOM (~17GB states alone). Pretraining 1B on a small corpus only makes
+# sense for framework stress-testing, not model quality.
+model:
+  d_model: 2048
+  n_layers: 22
+  n_heads: 16             # head_dim 128
+  n_kv_heads: 4           # GQA 4:1
+  intermediate_size: 5632
+  qk_norm: true
+  gradient_checkpointing: true
+training:
+  batch_size: 2
+  grad_accum_steps: 32    # effective 64 seqs
+  lr: 2.0e-4
+  optimizer: muon
+  schedule: wsd

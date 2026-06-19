@@ -1,0 +1,7 @@
+# ~164M params (d896/L14/H14, SwiGLU 2400). A solid dense default size,
+# restated as a preset so pipelines can name it explicitly.
+model:
+  d_model: 896
+  n_layers: 14
+  n_heads: 14
+  intermediate_size: 2400
