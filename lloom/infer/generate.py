@@ -61,6 +61,11 @@ def generate(model, idx: torch.Tensor, max_new_tokens: int, temperature=0.7,
     cache = model.new_cache(idx.shape[0]) if use_cache else None
     done = torch.zeros(idx.shape[0], dtype=torch.bool, device=device)
     logits = None
+    # Never emit padding/dead ids: vocab_size is padded to a multiple of 64,
+    # so logits at and beyond the real tokenizer vocab map to no decodable
+    # token. Mask them out (a no-op when tokenizer_vocab_size is unset/equal).
+    valid_vocab = getattr(model.cfg, "tokenizer_vocab_size", None)
+    mask_pad = valid_vocab is not None and valid_vocab < model.cfg.vocab_size
 
     for i in range(max_new_tokens):
         if idx.shape[1] >= max_pos:
@@ -71,6 +76,8 @@ def generate(model, idx: torch.Tensor, max_new_tokens: int, temperature=0.7,
         else:
             logits, _ = model(idx[:, -model.cfg.max_seq_len:])
         step_logits = logits[:, -1].float()
+        if mask_pad:
+            step_logits[:, valid_vocab:] = float("-inf")
         step_logits = _apply_repetition_penalty(step_logits, idx, repetition_penalty)
         nxt = sample_next(step_logits, temperature, top_k, top_p, min_p, gen)
         if eot_id is not None:

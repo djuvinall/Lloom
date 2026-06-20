@@ -5,8 +5,9 @@
 - optional perplexity delta check (fp32-cpu vs int8-cpu) when val streams exist
 
 Usage:
-  python scripts/quantize.py --checkpoint checkpoints/pretrain/best.pt
-  python scripts/quantize.py ... --ppl_check   # slower, prints quality delta
+  python scripts/quantize.py                       # uses runs/<run_name>/...
+  python scripts/quantize.py --checkpoint runs/<name>/checkpoints/pretrain/best.pt
+  python scripts/quantize.py ... --ppl_check       # slower, prints quality delta
 """
 import argparse
 import math
@@ -27,16 +28,20 @@ from lloom.quant import quantize_dynamic_int8, save_quantized, state_size_mb
 def main():
     ap = argparse.ArgumentParser()
     add_config_args(ap, "config/eval_config.yaml")
-    ap.add_argument("--checkpoint", default="checkpoints/pretrain/best.pt")
-    ap.add_argument("--out_dir", default="checkpoints/export")
+    ap.add_argument("--checkpoint", default=None,
+                    help="default: runs/<run_name>/checkpoints/pretrain/best.pt")
+    ap.add_argument("--out_dir", default=None,
+                    help="default: runs/<run_name>/checkpoints/export")
     ap.add_argument("--ppl_check", action="store_true")
     args = ap.parse_args()
     cfg = load_config(args.config, preset=args.preset, sets=args.sets)
     data_cfg = load_config("config/data_config.yaml")
-    out = Path(args.out_dir)
+    run = cfg.get("run_name", "default")
+    ckpt = args.checkpoint or f"runs/{run}/checkpoints/pretrain/best.pt"
+    out = Path(args.out_dir or f"runs/{run}/checkpoints/export")
     out.mkdir(parents=True, exist_ok=True)
 
-    model = load_model(args.checkpoint, torch.device("cpu"))
+    model = load_model(ckpt, torch.device("cpu"))
     fp32_mb = state_size_mb(model)
     st = export_safetensors(model, out)
     print(f"exported {st} ({fp32_mb:.0f}MB fp32)")
@@ -51,9 +56,10 @@ def main():
         streams = load_token_streams(data_cfg.tokens_dir, "val", names)
         stream = next(iter(streams.values()))
         dev = torch.device("cpu")
-        ce_f, _ = perplexity_on_stream(load_model(args.checkpoint, dev), stream,
-                                       2, cfg.seq_len, dev, max_batches=4)
-        ce_q, _ = perplexity_on_stream(q, stream, 2, cfg.seq_len, dev, max_batches=4)
+        seq_len = min(cfg.get("seq_len") or model.cfg.max_seq_len, model.cfg.max_seq_len)
+        ce_f, _ = perplexity_on_stream(load_model(ckpt, dev), stream,
+                                       2, seq_len, dev, max_batches=4)
+        ce_q, _ = perplexity_on_stream(q, stream, 2, seq_len, dev, max_batches=4)
         print(f"ppl fp32 {math.exp(ce_f):.3f} -> int8 {math.exp(ce_q):.3f} "
               f"(delta {100 * (math.exp(ce_q) / math.exp(ce_f) - 1):+.2f}%)")
 

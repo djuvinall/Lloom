@@ -16,8 +16,10 @@ data/processed/
 data/ood/
 data/sft/*
 !data/sft/sample.jsonl
+data/test/
 
 # Run outputs
+runs/
 checkpoints/
 logs/
 wandb/

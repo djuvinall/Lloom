@@ -17,7 +17,13 @@ a broken run resumes where it died. Combined with presets + --set overrides,
 one recipe produces arbitrarily many different models:
 
     python scripts/run_pipeline.py --pipeline config/pipelines/pretrain.yaml \
-        --preset large --set training.optimizer=muon
+        --preset large --set training.optimizer=muon --run-name large-muon
+
+Run identity: a single run_name is resolved once and (a) forwarded as
+`--set run_name=<name>` to every pass_overrides stage and (b) substituted for
+${run_name} in any stage's cmd/skip_if. That namespaces all of a run's
+artifacts under runs/<name>/ and lets a later stage (eval, quantize) find an
+earlier stage's outputs - so two runs never clobber each other.
 """
 from __future__ import annotations
 
@@ -27,6 +33,8 @@ import time
 from pathlib import Path
 
 import yaml
+
+from .config import default_run_name
 
 
 def load_recipe(path: str | Path) -> dict:
@@ -48,25 +56,31 @@ def _select(stages: list[dict], only=None, from_=None, until=None) -> list[dict]
     return stages[lo:hi]
 
 
+def _interp(value: str, run_name: str) -> str:
+    return value.replace("${run_name}", run_name)
+
+
 def run_pipeline(recipe_path: str | Path, preset: str | None = None,
                  sets: list[str] | None = None, only: str | None = None,
                  from_: str | None = None, until: str | None = None,
-                 dry_run: bool = False) -> None:
+                 dry_run: bool = False, run_name: str | None = None) -> None:
     recipe = load_recipe(recipe_path)
     stages = _select(recipe["stages"], only, from_, until)
-    forwarded = ([f"--preset={preset}"] if preset else []) + \
-                [f"--set={s}" for s in (sets or [])]
-    print(f"pipeline {recipe.get('name', recipe_path)}: "
-          f"{' -> '.join(s['name'] for s in stages)}"
-          + (f" | forwarding {' '.join(forwarded)}" if forwarded else ""))
+    run = run_name or default_run_name({})
+    # run_name is forwarded first so an explicit user `--set run_name=...` wins.
+    forwarded = ([f"--preset={preset}"] if preset else []) \
+        + [f"--set=run_name={run}"] + [f"--set={s}" for s in (sets or [])]
+    print(f"pipeline {recipe.get('name', recipe_path)} [run_name={run}]: "
+          f"{' -> '.join(s['name'] for s in stages)}")
 
     results = []
     for stage in stages:
-        cmd = [sys.executable] + [str(c) for c in stage["cmd"]]
-        if stage.get("pass_overrides") and forwarded:
+        cmd = [sys.executable] + [_interp(str(c), run) for c in stage["cmd"]]
+        if stage.get("pass_overrides"):
             cmd += forwarded
         skip = stage.get("skip_if")
-        if skip and Path(skip).exists():
+        if skip and Path(_interp(str(skip), run)).exists():
+            skip = _interp(str(skip), run)
             print(f"[{stage['name']}] skipped ({skip} exists)")
             results.append((stage["name"], "skipped", 0.0))
             continue

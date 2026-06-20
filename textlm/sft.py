@@ -34,12 +34,20 @@ def load_sft_pairs(sft_dir, pattern: str = "*.jsonl") -> list[dict]:
     if not paths:
         raise FileNotFoundError(
             f"no {pattern} in {sft_dir} - add SFT data before finetuning")
-    rows = []
+    rows, dropped = [], 0
     for r in load_jsonl(paths):
         p, resp = _first(r, _PROMPT_KEYS), _first(r, _RESPONSE_KEYS)
         if p and resp:
             rows.append({"prompt": p, "response": resp})
-    print(f"loaded {len(rows)} SFT pairs from {len(paths)} file(s)")
+        else:
+            dropped += 1
+    msg = f"loaded {len(rows)} SFT pairs from {len(paths)} file(s)"
+    if dropped:
+        msg += f" - dropped {dropped} row(s) missing a prompt or response"
+    print(msg)
+    if not rows:
+        raise ValueError(
+            f"no usable SFT pairs in {sft_dir} (every row missing prompt/response?)")
     return rows
 
 

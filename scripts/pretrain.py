@@ -2,7 +2,10 @@
 Usage:
   python scripts/pretrain.py
   python scripts/pretrain.py --preset large --set training.optimizer=muon
-  python scripts/pretrain.py --resume_from checkpoints/pretrain/last.pt
+  python scripts/pretrain.py --resume_from runs/<name>/checkpoints/pretrain/last.pt
+
+Resumes automatically from <out_dir>/last.pt if it exists, so a crashed run
+picks up where it died; pass --no_resume to force a fresh start.
 """
 import argparse
 import sys
@@ -23,7 +26,10 @@ def main():
     ap = argparse.ArgumentParser()
     add_config_args(ap, "config/training_config.yaml")
     ap.add_argument("--data_config", default="config/data_config.yaml")
-    ap.add_argument("--resume_from", default=None)
+    ap.add_argument("--resume_from", default=None,
+                    help="checkpoint to resume; defaults to <out_dir>/last.pt if present")
+    ap.add_argument("--no_resume", action="store_true",
+                    help="ignore any existing last.pt and start a fresh run")
     args = ap.parse_args()
     cfg = load_config(args.config, preset=args.preset, sets=args.sets)
     if args.wandb:
@@ -44,7 +50,13 @@ def main():
                                     cfg.model.max_seq_len, cfg.seed)
 
     mcfg = ModelConfig.from_dict(dict(cfg.model))
-    mcfg.vocab_size = max(mcfg.vocab_size, tok.vocab_size)
+    # Size the embedding/head to the tokenizer (honoring a larger configured
+    # floor if set) and pad up to a multiple of 64 for tensor-core throughput.
+    # Record the real vocab so generation masks the padding band and never
+    # samples an id the tokenizer can't decode.
+    real_vocab = tok.vocab_size
+    mcfg.vocab_size = (max(mcfg.vocab_size, real_vocab) + 63) // 64 * 64
+    mcfg.tokenizer_vocab_size = real_vocab
     model = TransformerLM(mcfg).to(device)
     n_params = count_params(model)
     n_hidden = sum(p.numel() for n, p in model.named_parameters()
@@ -68,8 +80,14 @@ def main():
 
     cfg.divergence_alert = data_cfg.curriculum.get("divergence_alert", 0.05)
     trainer = Trainer(cfg, model, sampler, val_streams, tok, device, ood)
-    if args.resume_from:
-        trainer.resume(args.resume_from)
+    resume_path = args.resume_from
+    if resume_path is None and not args.no_resume:
+        cand = Path(cfg.out_dir) / "last.pt"
+        if cand.exists():
+            resume_path = cand
+            print(f"auto-resuming from {cand} (pass --no_resume to start fresh)")
+    if resume_path:
+        trainer.resume(resume_path)
     save_snapshot([args.config, args.data_config],
                   Path(cfg.out_dir) / "config_snapshot", resolved=cfg)
     trainer.train()

@@ -269,16 +269,71 @@ stages:
     print("ok pipeline (dry-run, selection, skip_if)")
 
 
+def test_config_interpolation():
+    p = TMP / "rn_cfg.yaml"
+    p.write_text("run_name: null\n"
+                 "out_dir: runs/${run_name}/ckpt\n"
+                 "logging: {csv_path: runs/${run_name}/logs/m.csv}\n")
+    cfg = load_config(p)
+    assert cfg.run_name == "default"                       # null -> default
+    assert cfg.out_dir == "runs/default/ckpt"
+    assert cfg.logging.csv_path == "runs/default/logs/m.csv"
+    assert load_config(p, sets=["run_name=expA"]).out_dir == "runs/expA/ckpt"
+    q = TMP / "novars.yaml"
+    q.write_text("a: 1\npath: keep/${unknown}\n")
+    c3 = load_config(q)
+    assert "run_name" not in c3                            # injected only when key present
+    assert c3["path"] == "keep/${unknown}"                # unknown vars left verbatim
+    print("ok config interpolation (run_name default/override, ${} expansion)")
+
+
+def test_pipeline_run_name():
+    d = TMP / "pl"; d.mkdir(exist_ok=True)
+    (TMP / "argv.py").write_text(
+        "import sys, pathlib\n"
+        f"pathlib.Path(r'{(d / 'argv.txt').as_posix()}').write_text(' '.join(sys.argv))\n")
+    (TMP / "flag.py").write_text(
+        "import sys, pathlib\npathlib.Path(sys.argv[1]).write_text('ok')\n")
+    recipe = TMP / "recipe_rn.yaml"
+    recipe.write_text(f"""
+name: rn
+stages:
+  - name: forward
+    cmd: ["{(TMP / 'argv.py').as_posix()}"]
+    pass_overrides: true
+  - name: interp
+    cmd: ["{(TMP / 'flag.py').as_posix()}", "{d.as_posix()}/${{run_name}}.flag"]
+""")
+    run_pipeline(recipe, run_name="zed", sets=["model.n_layers=3"])
+    argv = (d / "argv.txt").read_text()
+    assert "--set=run_name=zed" in argv                    # run_name forwarded to stages
+    assert "--set=model.n_layers=3" in argv                # user --set still forwarded
+    assert (d / "zed.flag").exists()                       # ${run_name} interpolated in cmd
+    print("ok pipeline run_name (forwarded --set run_name + ${run_name} interpolation)")
+
+
+def test_vocab_mask():
+    set_seed(0)
+    model = TransformerLM(tiny_cfg(vocab_size=64, tokenizer_vocab_size=40)).eval()
+    x = torch.randint(0, 40, (1, 5))
+    out = generate(model, x, 40, temperature=2.0, top_p=1.0, seed=1)
+    assert out.max().item() < 40, out.max().item()         # dead ids >= 40 never sampled
+    print("ok vocab mask (logits >= tokenizer_vocab_size never sampled)")
+
+
 if __name__ == "__main__":
     test_config()
+    test_config_interpolation()
     test_schedules()
     test_newton_schulz()
     test_optimizers()
     test_arch_variants()
     test_kv_cache_equivalence()
     test_generation()
+    test_vocab_mask()
     test_sft_packing()
     test_lora()
     test_quant_and_export()
     test_pipeline()
+    test_pipeline_run_name()
     print("\nLOOM PASS")

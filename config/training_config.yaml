@@ -2,11 +2,13 @@
 # (config/presets/*.yaml) and --set overrides, merged over this file:
 #   base config < preset < --set   (see scripts/pretrain.py)
 
-run_name: null            # auto: run-{YYYYmmdd-HHMMSS}
+run_name: null            # null -> "default"; set per run (--set run_name=... or
+                          # run_pipeline --run-name) to keep models side by side.
+                          # All ${run_name} paths below namespace under it.
 seed: 42
 device: cuda              # cuda | cpu
-out_dir: checkpoints/pretrain
-tokenizer_dir: checkpoints/tokenizer
+out_dir: runs/${run_name}/checkpoints/pretrain
+tokenizer_dir: checkpoints/tokenizer   # shared across runs (not per-run)
 tokenizer_prefix: spm
 
 model:
@@ -85,8 +87,8 @@ early_stopping:
 
 logging:
   log_interval: 20
-  csv_path: logs/metrics.csv
-  samples_dir: logs/samples
+  csv_path: runs/${run_name}/logs/metrics.csv
+  samples_dir: runs/${run_name}/logs/samples
   wandb:
     enabled: false        # opt-in with --wandb; local CSV logging is always on
     project: lloom

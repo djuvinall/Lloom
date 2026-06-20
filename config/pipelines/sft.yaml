@@ -1,9 +1,12 @@
 # Post-pretraining: LoRA instruction-tune on prompt/response pairs, then eval.
 # Swap finetune_sft_lora.py for finetune_sft_full.py for a full finetune.
+# Use the SAME --run-name as the pretrain run so base_checkpoint resolves:
+#   python scripts/run_pipeline.py --pipeline config/pipelines/sft.yaml --run-name large-muon
 name: sft
 stages:
   - name: finetune_lora
     cmd: [scripts/finetune_sft_lora.py]
     pass_overrides: true
   - name: evaluate
-    cmd: [scripts/evaluate.py, --checkpoint, checkpoints/sft_lora/merged.pt]
+    cmd: [scripts/evaluate.py, --checkpoint, "runs/${run_name}/checkpoints/sft_lora/merged.pt"]
+    pass_overrides: true

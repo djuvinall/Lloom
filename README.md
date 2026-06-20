@@ -73,8 +73,9 @@ The bundled `textlm` project wires a corpus to lloom through thin CLI scripts. D
 
 ```bash
 python scripts/run_pipeline.py --pipeline config/pipelines/pretrain.yaml
-# different model, same pipeline:
-python scripts/run_pipeline.py --pipeline config/pipelines/pretrain.yaml --preset large --set training.optimizer=muon
+# a different model, kept side by side (artifacts land in runs/<run-name>/):
+python scripts/run_pipeline.py --pipeline config/pipelines/pretrain.yaml \
+    --preset large --set training.optimizer=muon --run-name large-muon
 ```
 
 Or run the stages by hand:
@@ -83,19 +84,22 @@ Or run the stages by hand:
 python scripts/prepare_data.py        # data/raw/*.txt -> normalized text
 python scripts/train_tokenizer.py     # SentencePiece tokenizer
 python scripts/tokenize_dataset.py    # -> uint16 token streams (train/val)
+python scripts/preflight.py           # validate tokenizer/streams/vocab before GPU time
 python scripts/pretrain.py            # add --preset nano for a quick CPU smoke test
-python scripts/evaluate.py --checkpoint checkpoints/pretrain/best.pt
+python scripts/evaluate.py --checkpoint runs/default/checkpoints/pretrain/best.pt
 ```
 
 Instruction-tune on `data/sft/*.jsonl` (`{"prompt": ..., "response": ...}`; a `sample.jsonl` is included), then serve or package:
 
 ```bash
 python scripts/finetune_sft_lora.py                 # or finetune_sft_full.py
-python scripts/serve.py --checkpoint checkpoints/sft_lora/merged.pt
-python scripts/quantize.py --checkpoint checkpoints/pretrain/best.pt   # int8 + safetensors
+python scripts/serve.py --checkpoint runs/default/checkpoints/sft_lora/merged.pt
+python scripts/quantize.py --checkpoint runs/default/checkpoints/pretrain/best.pt   # int8 + safetensors
 ```
 
-Note: set `tokenizer_config.yaml`'s `vocab_size` to suit your corpus — SentencePiece errors if it's too high for the available text, so lower it for small datasets.
+Note: set `tokenizer_config.yaml`'s `vocab_size` to suit your corpus — SentencePiece errors if it's too high for the available text, so lower it for small datasets. The model embedding/head is sized to the tokenizer automatically (padded to a multiple of 64), and generation never emits the padding ids.
+
+Every run's outputs are namespaced under `runs/<run_name>/` (checkpoints, logs, samples, eval). `run_name` defaults to `default`; pass `--run-name <name>` to a pipeline (or `--set run_name=<name>` to a single stage) to keep multiple models side by side instead of overwriting. `pretrain.py` auto-resumes from `runs/<name>/checkpoints/pretrain/last.pt` if present (`--no_resume` to start fresh).
 
 ## Config system
 
@@ -105,7 +109,7 @@ Models are defined in YAML and merged in this order (later wins):
 base config   <   preset   <   --set overrides
 ```
 
-Presets are partial YAMLs (usually a `model:` block plus a few training tweaks) that layer over a base training config. Overrides handle one-off tweaks without editing files. `save_snapshot` writes the fully resolved config beside each run for reproducibility.
+Presets are partial YAMLs (usually a `model:` block plus a few training tweaks) that layer over a base training config. Overrides handle one-off tweaks without editing files. `save_snapshot` writes the fully resolved config beside each run for reproducibility. Paths containing `${run_name}` are expanded at load time, so a run's artifacts namespace cleanly under `runs/<run_name>/` — swap the `default_run_name` strategy in `lloom/config.py` for a config fingerprint to get automatic, collision-proof per-config run dirs.
 
 ```python
 from lloom.config import load_config
@@ -141,22 +145,26 @@ textlm/             project layer: data prep (prep.py) + SFT templating (sft.py)
 data/
   raw/              source text, one .txt per source (sample.txt included)
   sft/              instruction data, *.jsonl (sample.jsonl included)
-tests/              test_lloom.py - framework subsystems on synthetic data, CPU, < 1 min
+  test/             optional held-out eval data; evaluate.py prefers it over sft/
+runs/               per-run outputs: runs/<run_name>/{checkpoints,logs,eval} (gitignored)
+tests/              test_lloom.py (framework units) + test_scripts_smoke.py (CLI e2e)
 ```
 
 ## Tests
 
 ```bash
-python tests/test_lloom.py     # or: pytest
+python tests/test_lloom.py            # framework subsystems (synthetic tensors, CPU, <1 min)
+python tests/test_scripts_smoke.py    # full CLI pipeline on a tiny corpus (needs torch + spm)
+# or: pytest
 ```
 
-Exercises every subsystem on synthetic data with no corpus or tokenizer training — CPU, under a minute.
+`test_lloom.py` exercises every subsystem on synthetic data with no corpus or tokenizer training. `test_scripts_smoke.py` runs the real scripts end to end (prepare → tokenizer → tokenize → preflight → pretrain → evaluate) on a synthetic corpus with the nano preset, catching stage-wiring and path-handoff regressions the unit tests can't see.
 
 ## Adapt it to your own data
 
 `lloom/` is the framework and stays untouched; the project lives in `textlm/` + `config/` + `data/`:
 
 - Put your corpus in `data/raw/<source>.txt` and list the sources (with curriculum `tier`s) in `config/data_config.yaml`.
-- Put instruction data in `data/sft/*.jsonl` as `{"prompt": ..., "response": ...}` (aliases `instruction`/`input` and `output`/`answer` are accepted).
+- Put instruction data in `data/sft/*.jsonl` as `{"prompt": ..., "response": ...}` (aliases `instruction`/`input` and `output`/`answer` are accepted). For trustworthy generation/retrieval/clustering scores, put a held-out split in `data/test/*.jsonl` — `evaluate.py` prefers it and warns when it has to fall back to training data.
 - Customize `textlm/prep.py` (text normalization / document splitting) and `textlm/sft.py` (prompt template) for your domain. The scripts and `lloom` don't change.
 - Match `tokenizer_config.yaml`'s `vocab_size` to your corpus size.

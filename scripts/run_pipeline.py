@@ -2,9 +2,9 @@
 
   python scripts/run_pipeline.py --pipeline config/pipelines/pretrain.yaml
   python scripts/run_pipeline.py --pipeline config/pipelines/pretrain.yaml \
-      --preset large --set training.optimizer=muon --set training.max_steps=20000
+      --preset large --set training.optimizer=muon --run-name large-muon
   python scripts/run_pipeline.py --pipeline config/pipelines/pretrain.yaml \
-      --from pretrain          # resume a failed run
+      --run-name large-muon --from pretrain   # resume that run where it died
   python scripts/run_pipeline.py ... --dry-run   # print commands only
 """
 import argparse
@@ -22,6 +22,10 @@ def main():
                     help="model preset name or path, forwarded to stages")
     ap.add_argument("--set", dest="sets", action="append", default=[],
                     metavar="KEY.PATH=VALUE", help="config override, forwarded")
+    ap.add_argument("--run-name", dest="run_name", default=None,
+                    help="namespace for this run's outputs (runs/<run_name>/...); "
+                         "default 'default'. Use a fresh name to keep models "
+                         "side by side instead of overwriting.")
     ap.add_argument("--only", default=None, help="run a single stage")
     ap.add_argument("--from", dest="from_", default=None, help="start at stage")
     ap.add_argument("--until", default=None, help="stop after stage")
@@ -29,7 +33,7 @@ def main():
     args = ap.parse_args()
     run_pipeline(args.pipeline, preset=args.preset, sets=args.sets,
                  only=args.only, from_=args.from_, until=args.until,
-                 dry_run=args.dry_run)
+                 dry_run=args.dry_run, run_name=args.run_name)
 
 
 if __name__ == "__main__":

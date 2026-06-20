@@ -8,7 +8,9 @@ raw_dir: data/raw
 text_dir: data/processed/text     # normalized text (documents split by <|endoftext|>)
 tokens_dir: data/processed/tokens # uint16 .npy token streams per source/split
 ood_dir: data/ood
-sft_dir: data/sft
+sft_dir: data/sft                 # SFT *training* data
+test_dir: data/test               # held-out eval data; evaluate.py prefers this over
+                                  # sft_dir for QA/retrieval/clustering (warns on fallback)
 
 # `tier` drives curriculum weighting below. Add as many sources/domains as you
 # like; group related ones into the same tier.

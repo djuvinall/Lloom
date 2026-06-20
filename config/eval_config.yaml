@@ -1,10 +1,13 @@
 # Stage 4: standalone evaluation of any checkpoint.
-checkpoint: checkpoints/pretrain/best.pt
+run_name: null            # namespaces the fallback checkpoint + eval outputs
+checkpoint: runs/${run_name}/checkpoints/pretrain/best.pt   # fallback; --checkpoint wins
+out_dir: runs/${run_name}/eval   # eval_results.json + generations.jsonl land here
 tokenizer_dir: checkpoints/tokenizer
 tokenizer_prefix: spm
 device: cuda
 batch_size: 16
-seq_len: 1024
+seq_len: null             # null -> use the checkpoint's max_seq_len; any value is
+                          # clamped down to it (eval can't exceed trained context)
 
 perplexity:
   enabled: true
@@ -12,14 +15,14 @@ perplexity:
   ood: true               # uses data_config ood_files if present
 
 retrieval:                # MRR / NDCG@k over embedding similarity
-  enabled: true           # runs iff data/sft/retrieval_pairs.jsonl exists
+  enabled: true           # runs iff data/test or data/sft retrieval_pairs.jsonl exists
   k: 10                   # {"query": ..., "positive": ...} per line
 
 qa:                       # generation dump for human rating
-  enabled: true           # runs iff data/sft/*.jsonl exist
+  enabled: true           # runs iff data/test or data/sft *.jsonl exist
   max_pairs: 300
   max_new_tokens: 150
 
 clustering:               # kmeans + silhouette / Davies-Bouldin / NMI
-  enabled: true           # runs iff data/sft/themed.jsonl exists
+  enabled: true           # runs iff themed.jsonl exists (data/test preferred)
                           # {"text": ..., "theme": ...} per line

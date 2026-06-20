@@ -1,8 +1,11 @@
-# Data -> tokenizer -> streams -> pretrain -> eval, one command:
+# Data -> tokenizer -> streams -> preflight -> pretrain -> eval, one command:
 #   python scripts/run_pipeline.py --pipeline config/pipelines/pretrain.yaml
-# Different model, same pipeline:
-#   ... --preset large --set training.optimizer=muon
-# Resume after a failure: ... --from pretrain
+# Different model, kept side by side (artifacts under runs/<run-name>/):
+#   ... --preset large --set training.optimizer=muon --run-name large-muon
+# Resume that run after a failure: ... --run-name large-muon --from pretrain
+#
+# Data-prep stages write shared, run-independent artifacts (data/, tokenizer);
+# only preflight/pretrain/evaluate are namespaced by ${run_name}.
 name: pretrain
 stages:
   - name: prepare_data
@@ -14,8 +17,12 @@ stages:
   - name: tokenize_dataset
     cmd: [scripts/tokenize_dataset.py]
     skip_if: data/processed/tokens/train_sample.npy
+  - name: preflight
+    cmd: [scripts/preflight.py]
+    pass_overrides: true        # validate the resolved model size before training
   - name: pretrain
     cmd: [scripts/pretrain.py]
     pass_overrides: true
   - name: evaluate
-    cmd: [scripts/evaluate.py, --checkpoint, checkpoints/pretrain/best.pt]
+    cmd: [scripts/evaluate.py, --checkpoint, "runs/${run_name}/checkpoints/pretrain/best.pt"]
+    pass_overrides: true

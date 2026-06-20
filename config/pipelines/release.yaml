@@ -1,6 +1,8 @@
 # Package a trained checkpoint: int8 quantize + safetensors export.
+# Same --run-name as the run you're releasing:
+#   python scripts/run_pipeline.py --pipeline config/pipelines/release.yaml --run-name large-muon
 name: release
 stages:
   - name: quantize
-    cmd: [scripts/quantize.py, --checkpoint, checkpoints/pretrain/best.pt]
+    cmd: [scripts/quantize.py, --checkpoint, "runs/${run_name}/checkpoints/pretrain/best.pt"]
     pass_overrides: true

@@ -10,7 +10,10 @@ from dataclasses import dataclass, field
 
 @dataclass
 class ModelConfig:
-    vocab_size: int = 32000
+    vocab_size: int = 32000            # embedding/head width; padded to a multiple of 64
+    tokenizer_vocab_size: int | None = None  # real token count; logits >= this are
+                                       # masked at generation so padding/dead ids
+                                       # (vocab_size - tokenizer_vocab_size) never sample
     d_model: int = 896
     n_layers: int = 14
     n_heads: int = 14

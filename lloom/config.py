@@ -4,14 +4,21 @@ Merge order (later wins):  base config  <  preset  <  --set overrides
 This is the whole "one config, many models" automation story: presets are
 partial YAMLs (usually a `model:` block plus training adjustments), and
 --set handles one-off tweaks without touching files.
+
+Run identity: a config that carries a `run_name` key gets it resolved (null ->
+default_run_name) and then ${run_name} is expanded throughout the tree, so
+paths like runs/${run_name}/checkpoints namespace every run's artifacts.
 """
 from __future__ import annotations
 
 import copy
+import re
 import shutil
 from pathlib import Path
 
 import yaml
+
+_VAR_RE = re.compile(r"\$\{(\w+)\}")
 
 
 class Cfg(dict):
@@ -81,9 +88,57 @@ def resolve_preset(preset: str | Path, preset_dir: str | Path = "config/presets"
     raise FileNotFoundError(f"preset {preset!r} not found (looked for {cand})")
 
 
+def default_run_name(cfg: dict) -> str:
+    """Resolve the identity that namespaces a run's artifacts (option B).
+
+    Returns a stable name ("default") so a pretrain -> sft -> release sequence
+    invoked under one run_name all lands in runs/<run_name>/... and downstream
+    stages can find upstream outputs. Override per run with
+    `--set run_name=my-model` (or `run_pipeline --run-name my-model`).
+
+    Option C hook: for automatic, collision-proof namespacing without manual
+    names, return a fingerprint of the resolved config (+ data) here, e.g.
+
+        import hashlib, yaml
+        key = yaml.safe_dump(to_plain({k: cfg.get(k) for k in
+              ("model", "training", "objectives")}), sort_keys=True)
+        return "h" + hashlib.sha1(key.encode()).hexdigest()[:10]
+
+    Everything else -- ${run_name} interpolation, pipeline forwarding, skip_if
+    -- already threads whatever this returns through every path, so swapping
+    the strategy here is the whole of option C.
+    """
+    return "default"
+
+
+def interpolate_vars(cfg: dict) -> dict:
+    """Substitute ${key} with top-level scalar config values, recursively.
+
+    Lets paths be written once in terms of run identity, e.g.
+        out_dir: runs/${run_name}/checkpoints/pretrain
+    Only top-level str/int/float keys are exposed; unknown ${...} are left
+    verbatim (never an error) so unrelated shell-style text survives."""
+    scalars = {k: v for k, v in cfg.items() if isinstance(v, (str, int, float))}
+
+    def sub(s: str) -> str:
+        return _VAR_RE.sub(
+            lambda m: str(scalars[m.group(1)]) if m.group(1) in scalars
+            else m.group(0), s)
+
+    def walk(o):
+        if isinstance(o, dict):
+            return {k: walk(v) for k, v in o.items()}
+        if isinstance(o, list):
+            return [walk(v) for v in o]
+        return sub(o) if isinstance(o, str) else o
+
+    return walk(cfg)
+
+
 def load_config(path: str | Path, preset: str | Path | None = None,
                 sets: list[str] | None = None,
-                preset_dir: str | Path = "config/presets") -> Cfg:
+                preset_dir: str | Path = "config/presets",
+                resolve: bool = True) -> Cfg:
     with open(path, "r", encoding="utf-8") as f:
         cfg = yaml.safe_load(f) or {}
     if preset:
@@ -91,6 +146,12 @@ def load_config(path: str | Path, preset: str | Path | None = None,
             cfg = deep_merge(cfg, yaml.safe_load(f) or {})
     if sets:
         cfg = deep_merge(cfg, parse_overrides(sets))
+    if resolve:
+        # Resolve run identity (only for configs that opt in with a run_name
+        # key), then expand ${run_name} and friends throughout the tree.
+        if cfg.get("run_name", "_absent_") in (None, "", "null"):
+            cfg["run_name"] = default_run_name(cfg)
+        cfg = interpolate_vars(cfg)
     return Cfg(cfg)
 
 
