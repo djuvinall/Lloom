@@ -6,8 +6,6 @@ protocol for "is this embedding space usable?".
 """
 from __future__ import annotations
 
-import math
-
 import torch
 
 from .embed import embed_texts

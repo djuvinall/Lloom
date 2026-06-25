@@ -1,5 +1,9 @@
 # Lloom
 
+[![CI](https://github.com/djuvinall/Lloom/actions/workflows/ci.yml/badge.svg)](https://github.com/djuvinall/Lloom/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](pyproject.toml)
+
 A config-driven, project-agnostic framework for training language models from scratch in pure PyTorch. One transformer implementation, one set of trainers, driven entirely by YAML — "a different model" means "a different config", not different code.
 
 Lloom supplies the machinery: model zoo, data pipeline, tokenizer, trainers, finetuning, inference, eval, quantization, and pipeline automation. It ships with a small, generic reference project (`textlm/` + `scripts/` + `config/`) so you can train end-to-end out of the box and adapt it to any corpus. Nothing in `lloom/` itself knows about any particular dataset.
@@ -168,3 +172,11 @@ python tests/test_scripts_smoke.py    # full CLI pipeline on a tiny corpus (need
 - Put instruction data in `data/sft/*.jsonl` as `{"prompt": ..., "response": ...}` (aliases `instruction`/`input` and `output`/`answer` are accepted). For trustworthy generation/retrieval/clustering scores, put a held-out split in `data/test/*.jsonl` — `evaluate.py` prefers it and warns when it has to fall back to training data.
 - Customize `textlm/prep.py` (text normalization / document splitting) and `textlm/sft.py` (prompt template) for your domain. The scripts and `lloom` don't change.
 - Match `tokenizer_config.yaml`'s `vocab_size` to your corpus size.
+
+## Contributing
+
+Bug reports, fixes, features, and presets are welcome. See [CONTRIBUTING.md](CONTRIBUTING.md) for setup and the lint/test workflow, and [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md) for community expectations.
+
+## License
+
+Licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for attribution.

@@ -1,0 +1,46 @@
+name: Bug report
+description: Report something that isn't working as expected.
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: The exact command(s) you ran. A minimal repro on the `nano` preset is ideal.
+      placeholder: |
+        python scripts/run_pipeline.py --pipeline config/pipelines/pretrain.yaml --preset nano
+    validations:
+      required: true
+  - type: textarea
+    id: traceback
+    attributes:
+      label: Full traceback / logs
+      render: shell
+    validations:
+      required: false
+  - type: input
+    id: preset
+    attributes:
+      label: Preset / config
+      placeholder: "nano | small | base | large | xl | moe (+ any --set overrides)"
+    validations:
+      required: false
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, Python version, torch version, GPU (if any).
+      placeholder: |
+        OS: Ubuntu 22.04
+        Python: 3.11
+        torch: 2.5.0 (cu128)
+        GPU: RTX 5070 Ti 16GB
+    validations:
+      required: true
