@@ -40,6 +40,7 @@ Issues = "https://github.com/djuvinall/Lloom/issues"
 [project.optional-dependencies]
 serve = ["fastapi>=0.110", "uvicorn>=0.29"]
 train = ["wandb>=0.17"]
+viz = ["matplotlib>=3.7"]
 dev = ["pytest>=8.0", "ruff>=0.6"]
 
 [tool.setuptools.dynamic]

@@ -11,6 +11,15 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - GitHub Actions CI: ruff lint + pytest on Python 3.10–3.12 (CPU PyTorch).
 - Packaging metadata in `pyproject.toml`: license, project URLs, classifiers.
 - Community docs: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue/PR templates.
+- `docs/ARCHITECTURE.md` design-rationale doc and a README pipeline diagram (Mermaid).
+- `scripts/plot_loss.py` loss-curve plotter + `viz` extra; README Results section.
+- README Status & roadmap section.
+
+### Fixed
+- Smoke test used `vocab_size: 300` (below SentencePiece's byte-fallback floor) and
+  asserted a non-existent `val/perplexity/total` key; corrected to `512` and
+  `perplexity/total`. Quoted `${run_name}` in the config-interpolation test's
+  flow-mapping YAML so it parses.
 
 ## [0.1.0] - 2026-06-19
 

@@ -10,6 +10,35 @@ Lloom supplies the machinery: model zoo, data pipeline, tokenizer, trainers, fin
 
 Importing `lloom` pulls in no torch; the heavy subpackages (`lloom.model`, `lloom.train`, ...) are imported explicitly.
 
+## Pipeline
+
+```mermaid
+flowchart LR
+    raw["data/raw/*.txt"] --> prep[prepare_data]
+    prep --> text["processed text"]
+    text --> tok[train_tokenizer]
+    tok --> spm["SentencePiece"]
+    text --> tk[tokenize_dataset]
+    spm --> tk
+    tk --> streams["uint16 streams"]
+    streams --> pf[preflight]
+    spm --> pf
+    pf --> pre[pretrain]
+    pre --> ckpt["best.pt"]
+    ckpt --> sft[finetune_sft]
+    ckpt --> ev[evaluate]
+    ckpt --> q[quantize]
+    sft --> serve[serve]
+    cfg["config + presets"] -.drives.-> pre
+    cfg -.drives.-> sft
+    cfg -.drives.-> ev
+```
+
+Every box is a thin CLI script over the framework; stages hand off through files
+on disk, so any stage runs standalone and the pipeline resumes. See
+[**docs/ARCHITECTURE.md**](docs/ARCHITECTURE.md) for the design rationale behind
+each piece.
+
 ## Features
 
 **Model** (`lloom.model`) — decoder-only transformer where every architecture choice is a `ModelConfig` field:
@@ -105,6 +134,14 @@ Note: set `tokenizer_config.yaml`'s `vocab_size` to suit your corpus — Sentenc
 
 Every run's outputs are namespaced under `runs/<run_name>/` (checkpoints, logs, samples, eval). `run_name` defaults to `default`; pass `--run-name <name>` to a pipeline (or `--set run_name=<name>` to a single stage) to keep multiple models side by side instead of overwriting. `pretrain.py` auto-resumes from `runs/<name>/checkpoints/pretrain/last.pt` if present (`--no_resume` to start fresh).
 
+## Results
+
+Training loss from a reference pretraining run — a ~164M-parameter model on a single RTX 5070 Ti (16 GB). Cross-entropy falls from ~8.0 to a smoothed ~1.4 over 5,860 steps. The faint spikes are the span-corruption objective mixed in per micro-batch (a harder task than plain causal LM); the bold line is its EMA trend.
+
+![Lloom pretraining loss](docs/assets/loss_curve.png)
+
+Metrics log to CSV every interval; regenerate the plot with `python scripts/plot_loss.py runs/<name>/logs/metrics.csv`.
+
 ## Config system
 
 Models are defined in YAML and merged in this order (later wins):
@@ -144,8 +181,9 @@ config/
   eval_config.yaml      tokenizer_config.yaml
   presets/            model-size presets (nano ... xl, moe)
   pipelines/          multi-stage recipes (pretrain, sft, release)
-scripts/            thin CLI entry points, Stages 0-5 (depend only on lloom + textlm)
+scripts/            thin CLI entry points, Stages 0-5 (+ plot_loss.py viz helper)
 textlm/             project layer: data prep (prep.py) + SFT templating (sft.py)
+docs/               ARCHITECTURE.md (design rationale) + assets/
 data/
   raw/              source text, one .txt per source (sample.txt included)
   sft/              instruction data, *.jsonl (sample.jsonl included)
@@ -172,6 +210,17 @@ python tests/test_scripts_smoke.py    # full CLI pipeline on a tiny corpus (need
 - Put instruction data in `data/sft/*.jsonl` as `{"prompt": ..., "response": ...}` (aliases `instruction`/`input` and `output`/`answer` are accepted). For trustworthy generation/retrieval/clustering scores, put a held-out split in `data/test/*.jsonl` — `evaluate.py` prefers it and warns when it has to fall back to training data.
 - Customize `textlm/prep.py` (text normalization / document splitting) and `textlm/sft.py` (prompt template) for your domain. The scripts and `lloom` don't change.
 - Match `tokenizer_config.yaml`'s `vocab_size` to your corpus size.
+
+## Status & roadmap
+
+Alpha (`v0.1.0`). The framework is feature-complete across the pipeline and
+covered by unit + end-to-end CLI tests on Python 3.10–3.12; APIs may still shift
+between minor versions. On the radar:
+
+- Distributed / multi-GPU training (currently single-device)
+- FlashAttention path as an optional backend alongside SDPA
+- More tokenizer backends (currently SentencePiece)
+- Expanded eval (downstream task harness beyond perplexity/retrieval/clustering)
 
 ## Contributing
 
