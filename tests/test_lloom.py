@@ -271,9 +271,11 @@ stages:
 
 def test_config_interpolation():
     p = TMP / "rn_cfg.yaml"
-    p.write_text("run_name: null\n"
-                 "out_dir: runs/${run_name}/ckpt\n"
-                 "logging: {csv_path: runs/${run_name}/logs/m.csv}\n")
+    p.write_text('run_name: null\n'
+                 'out_dir: runs/${run_name}/ckpt\n'
+                 # quote the flow-mapping scalar: ${...} contains '{', which YAML
+                 # otherwise reads as a nested flow map and rejects.
+                 'logging: {csv_path: "runs/${run_name}/logs/m.csv"}\n')
     cfg = load_config(p)
     assert cfg.run_name == "default"                       # null -> default
     assert cfg.out_dir == "runs/default/ckpt"

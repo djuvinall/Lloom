@@ -56,9 +56,11 @@ def run_smoke(tmp: str) -> None:
     (work / "data/sft").mkdir(parents=True)
     shutil.copy(ROOT / "data/sft/sample.jsonl", work / "data/sft/sample.jsonl")
 
-    # Shrink the tokenizer for the tiny corpus (16000 would error - see README).
+    # Size the tokenizer for the tiny corpus. 16000 is too high (too few pieces);
+    # byte_fallback reserves 256 + alphabet + specials needs >313, so 300 is too
+    # low. 512 sits comfortably between the floor and this corpus's ceiling (~792).
     tok_cfg = work / "config/tokenizer_config.yaml"
-    tok_cfg.write_text(tok_cfg.read_text().replace("vocab_size: 16000", "vocab_size: 300"))
+    tok_cfg.write_text(tok_cfg.read_text().replace("vocab_size: 16000", "vocab_size: 512"))
 
     env = dict(os.environ, PYTHONPATH=str(work))
 
