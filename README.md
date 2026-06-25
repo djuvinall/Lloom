@@ -136,7 +136,7 @@ Every run's outputs are namespaced under `runs/<run_name>/` (checkpoints, logs, 
 
 ## Results
 
-Training loss from a reference pretraining run — a ~164M-parameter model on a single RTX 5070 Ti (16 GB). Cross-entropy falls from ~8.0 to a smoothed ~1.4 over 5,860 steps. The faint spikes are the span-corruption objective mixed in per micro-batch (a harder task than plain causal LM); the bold line is its EMA trend.
+Training loss from a reference pretraining run — a ~40M-parameter model (`small` preset) on a single RTX 5070 Ti (16 GB). Cross-entropy falls from ~8.0 to a smoothed ~1.4 over 5,860 steps. The faint spikes are the span-corruption objective mixed in per micro-batch (a harder task than plain causal LM); the bold line is its EMA trend.
 
 ![Lloom pretraining loss](docs/assets/loss_curve.png)
 
