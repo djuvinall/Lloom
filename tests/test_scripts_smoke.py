@@ -89,7 +89,7 @@ def run_smoke(tmp: str) -> None:
     res = work / "runs/default/eval/eval_results.json"
     assert res.exists(), f"evaluate did not write {res}"
     data = json.loads(res.read_text())
-    assert "val/perplexity/total" in data, data
+    assert "perplexity/total" in data, data       # evaluate.py keys perplexity by source/total
     print("ok scripts smoke (prepare -> tokenizer -> tokenize -> preflight -> "
           "pretrain -> evaluate; runs/ namespacing intact)")
 
