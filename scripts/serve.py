@@ -1,7 +1,7 @@
 """Stage 5b: local inference server (FastAPI + SSE streaming).
 
-  python scripts/serve.py --checkpoint checkpoints/pretrain/best.pt
-  python scripts/serve.py --checkpoint checkpoints/export/model_int8.pt --int8
+  python scripts/serve.py --checkpoint runs/default/checkpoints/sft_lora/merged.pt
+  python scripts/serve.py --checkpoint runs/default/checkpoints/export/model_int8.pt --int8
 
   curl -s localhost:8000/health
   curl -s localhost:8000/generate -d '{"prompt": "Once upon a time"}' \
@@ -23,7 +23,7 @@ from lloom.utils import get_device
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--checkpoint", default="checkpoints/pretrain/best.pt")
+    ap.add_argument("--checkpoint", default="runs/default/checkpoints/pretrain/best.pt")
     ap.add_argument("--tokenizer_dir", default="checkpoints/tokenizer")
     ap.add_argument("--tokenizer_prefix", default="spm")
     ap.add_argument("--int8", action="store_true",

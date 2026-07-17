@@ -130,7 +130,9 @@ with full RNG state, mixed-precision autocast, gradient clipping, and dual loggi
 - **Objectives:** causal LM, optionally mixed per-micro-batch with span corruption.
 - **Logging:** an append-only `CSVLogger` that survives with no external service
   (it grows its header when validation adds `val/*` columns), and an optional
-  no-op-unless-enabled `WandbLogger` so a run never blocks on a logging service.
+  `WandbLogger` isolated in `lloom/wandb_logging.py` — inert (no import, no
+  network, no `wandb.init()`) unless the `WANDB_ENABLED` env var is truthy, so
+  a run never blocks on a logging service and CSV needs no flag at all.
 - **Checkpointing:** `last.pt` carries optimizer state (the resume point);
   `best.pt` and rolling `step_*.pt` are model-only to roughly halve I/O.
   Early stopping tracks validation loss with patience.

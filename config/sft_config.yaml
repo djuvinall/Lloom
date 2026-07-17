@@ -54,5 +54,5 @@ logging:
   log_interval: 10
   csv_path: runs/${run_name}/logs/sft_metrics.csv
   wandb:
-    enabled: false
+    # Gated by the WANDB_ENABLED env var (or --wandb); CSV logging is always on.
     project: lloom

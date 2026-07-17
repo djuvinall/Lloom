@@ -1,7 +1,8 @@
 """Pretraining loop: checkpoint/resume, mixture-sampler monitoring,
-multi-objective mixing, val + OOD evals, sample generation, CSV + WandB
-logging. Project-agnostic: anything corpus-specific arrives through the
-sampler, tokenizer, and config.
+multi-objective mixing, val + OOD evals, sample generation, CSV logging
+(WandB mirroring is optional and inert unless WANDB_ENABLED is set - see
+lloom.wandb_logging). Project-agnostic: anything corpus-specific arrives
+through the sampler, tokenizer, and config.
 """
 from __future__ import annotations
 
@@ -16,7 +17,8 @@ from . import objectives
 from .optim import build_optimizer
 from .schedules import build_schedule
 from ..eval.perplexity import perplexity_on_stream
-from ..utils import CSVLogger, WandbLogger, load_rng_state, rng_state
+from ..utils import CSVLogger, load_rng_state, rng_state
+from ..wandb_logging import WandbLogger
 
 
 class Trainer:
@@ -38,8 +40,8 @@ class Trainer:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.csv = CSVLogger(cfg.logging.csv_path)
         run = cfg.run_name or f"run-{time.strftime('%Y%m%d-%H%M%S')}"
-        self.wandb = WandbLogger(cfg.logging.wandb.enabled, cfg.logging.wandb.project,
-                                 run, dict(cfg))
+        wb = cfg.logging.get("wandb") or {}          # activation is WANDB_ENABLED's call
+        self.wandb = WandbLogger(wb.get("project", "lloom"), run, dict(cfg))
         self.ema = {objectives.CAUSAL: None, objectives.SPAN: None}
         self.mix = cfg.get("objectives") or {"causal_lm_prob": 1.0}
 
@@ -95,14 +97,16 @@ class Trainer:
             if self.step % self.cfg.logging.log_interval == 0:
                 self._log_train(step_loss, gnorm, tokens_per_step, t0); t0 = time.time()
             if self.step % self.cfg.evaluation.eval_interval == 0:
-                stop = self._validate()
-                self._save("last.pt")                              # resume point (with optimizer)
-                self._save(f"step_{self.step}.pt", with_optim=False); self._rotate()
-                if stop:
+                if self._validate():
                     print(f"early stop at {self.step} (no improvement "
                           f"x{self.cfg.early_stopping.patience} evals)"); break
+            if self.step % self.cfg.checkpoint.save_interval == 0:
+                self._save("last.pt")                              # resume point (with optimizer)
+                self._save(f"step_{self.step}.pt", with_optim=False); self._rotate()
             if self.step % self.cfg.sampling.sample_interval == 0:
                 self._samples()
+        if self.best_val == float("inf"):    # ended before the first eval_interval:
+            self._validate()                 # validate once so best.pt always exists
         self._save("last.pt"); self.wandb.finish()
 
     # ------------------------------------------------------------- logging

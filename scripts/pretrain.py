@@ -8,6 +8,7 @@ Resumes automatically from <out_dir>/last.pt if it exists, so a crashed run
 picks up where it died; pass --no_resume to force a fresh start.
 """
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -32,8 +33,8 @@ def main():
                     help="ignore any existing last.pt and start a fresh run")
     args = ap.parse_args()
     cfg = load_config(args.config, preset=args.preset, sets=args.sets)
-    if args.wandb:
-        cfg.logging.wandb.enabled = True
+    if args.wandb:                       # sugar for the real gate (see lloom.wandb_logging)
+        os.environ["WANDB_ENABLED"] = "1"
     data_cfg = load_config(args.data_config)
     set_seed(cfg.seed)
     device = get_device(cfg.device)

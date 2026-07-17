@@ -6,6 +6,44 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Changed
+- All wandb code now lives in `lloom/wandb_logging.py`, gated by the
+  `WANDB_ENABLED` environment variable: unset/falsy means fully inert (no
+  import, no network, no `wandb.init()`); CSV logging remains always-on with
+  no flag. `--wandb` on the training scripts now sets `WANDB_ENABLED=1` for
+  the process, and the dead `logging.wandb.enabled` config key was removed
+  (`logging.wandb.project` still configures the project name). `wandb` is no
+  longer installed by `requirements.txt`; use `.[train]`.
+
+### Fixed
+- `tests/test_scripts_smoke.py` excluded any directory named `data` from its
+  repo copy — including the `lloom/data` subpackage — so the pretrain stage
+  failed with `ModuleNotFoundError`. The exclusion now applies only to the
+  top-level corpus `data/`. The smoke pipeline now also covers
+  `finetune_sft_lora.py`.
+- Trainers guarantee a `best.pt` when training ends before the first
+  `eval_interval` (final validation), so `finetune_sft_lora.py` no longer
+  crashes on tiny datasets like the bundled `data/sft/sample.jsonl`.
+- `train_tokenizer` clamps `vocab_size` (with a warning) to SentencePiece's
+  reported maximum instead of failing, so the out-of-box pretrain pipeline
+  runs on the bundled sample corpus without config edits.
+- The serve web UI's Q&A mode now templates with the `<|prompt|>`/`<|response|>`
+  tokens the bundled SFT setup actually trains with (was nonexistent
+  `<|question|>`/`<|answer|>`).
+- Preflight errors when the objectives mix includes span corruption but the
+  tokenizer lacks a `<|mask|>` token (previously an embedding IndexError deep
+  into training).
+- `checkpoint.save_interval` is honored for `last.pt` + rolling `step_*.pt`
+  saves (was dead config; saving rode on `evaluation.eval_interval`).
+- `serve.py` default checkpoint path updated to the `runs/<run_name>/` layout.
+- Clear constructor error for token streams too short to form one training
+  window; friendlier error for a missing preset file path; the evaluator no
+  longer feeds `retrieval_pairs.jsonl` / `themed.jsonl` rows into QA
+  generation.
+
+### Removed
+- Unused `tqdm` dependency (was never imported).
+
 ### Added
 - Apache-2.0 `LICENSE` and `NOTICE`.
 - GitHub Actions CI: ruff lint + pytest on Python 3.10–3.12 (CPU PyTorch).

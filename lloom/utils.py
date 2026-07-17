@@ -1,4 +1,5 @@
-"""Seeding, device, RNG snapshots, metric loggers, VRAM estimation."""
+"""Seeding, device, RNG snapshots, CSV metric logging, VRAM estimation.
+(Optional wandb logging lives in lloom.wandb_logging, gated by WANDB_ENABLED.)"""
 from __future__ import annotations
 
 import csv
@@ -110,30 +111,3 @@ class CSVLogger:
         else:                                        # known columns: fast append
             with open(self.path, "a", newline="", encoding="utf-8") as f:
                 csv.DictWriter(f, fieldnames=self._keys, extrasaction="ignore").writerow(row)
-
-
-class WandbLogger:
-    """No-op unless enabled and wandb importable - training never blocks on it."""
-
-    def __init__(self, enabled: bool, project: str, run_name: str, config: dict):
-        self.run = None
-        if not enabled:
-            return
-        try:
-            import wandb
-            self.run = wandb.init(project=project, name=run_name, config=config)
-        except Exception as e:  # offline, not installed, not logged in
-            print(f"[wandb] disabled ({e})")
-
-    def log(self, metrics: dict, step: int) -> None:
-        if self.run is not None:
-            self.run.log(metrics, step=step)
-
-    def log_text(self, key: str, text: str, step: int) -> None:
-        if self.run is not None:
-            import wandb
-            self.run.log({key: wandb.Html(f"<pre>{text}</pre>")}, step=step)
-
-    def finish(self) -> None:
-        if self.run is not None:
-            self.run.finish()

@@ -130,7 +130,7 @@ python scripts/serve.py --checkpoint runs/default/checkpoints/sft_lora/merged.pt
 python scripts/quantize.py --checkpoint runs/default/checkpoints/pretrain/best.pt   # int8 + safetensors
 ```
 
-Note: set `tokenizer_config.yaml`'s `vocab_size` to suit your corpus — SentencePiece errors if it's too high for the available text, so lower it for small datasets. The model embedding/head is sized to the tokenizer automatically (padded to a multiple of 64), and generation never emits the padding ids.
+Note: set `tokenizer_config.yaml`'s `vocab_size` to suit your corpus — if it's too high for the available text, `train_tokenizer.py` clamps it to SentencePiece's reported maximum with a warning (set it at or below that value to silence the warning). The model embedding/head is sized to the tokenizer automatically (padded to a multiple of 64), and generation never emits the padding ids.
 
 Every run's outputs are namespaced under `runs/<run_name>/` (checkpoints, logs, samples, eval). `run_name` defaults to `default`; pass `--run-name <name>` to a pipeline (or `--set run_name=<name>` to a single stage) to keep multiple models side by side instead of overwriting. `pretrain.py` auto-resumes from `runs/<name>/checkpoints/pretrain/last.pt` if present (`--no_resume` to start fresh).
 
@@ -141,6 +141,14 @@ Training loss from a reference pretraining run — a ~40M-parameter model (`smal
 ![Lloom pretraining loss](docs/assets/loss_curve.png)
 
 Metrics log to CSV every interval; regenerate the plot with `python scripts/plot_loss.py runs/<name>/logs/metrics.csv`.
+
+CSV is the only logger by default. To also mirror metrics to Weights & Biases, install it (`pip install -e ".[train]"`) and set the `WANDB_ENABLED` environment variable for the run — everything wandb is isolated in `lloom/wandb_logging.py` and stays completely inert (no import, no network) unless that variable is truthy:
+
+```bash
+WANDB_ENABLED=1 python scripts/pretrain.py ...   # or: python scripts/pretrain.py --wandb ...
+```
+
+The `--wandb` flag on the training scripts is shorthand that sets `WANDB_ENABLED=1` for the process.
 
 ## Config system
 

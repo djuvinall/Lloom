@@ -15,7 +15,8 @@ import torch
 from .optim import build_optimizer
 from .schedules import build_schedule
 from ..data.sft import block_causal_mask
-from ..utils import CSVLogger, WandbLogger
+from ..utils import CSVLogger
+from ..wandb_logging import WandbLogger
 
 
 class SFTTrainer:
@@ -35,8 +36,8 @@ class SFTTrainer:
         self.out_dir.mkdir(parents=True, exist_ok=True)
         self.csv = CSVLogger(cfg.logging.csv_path)
         run = cfg.get("run_name") or f"sft-{time.strftime('%Y%m%d-%H%M%S')}"
-        self.wandb = WandbLogger(cfg.logging.wandb.enabled,
-                                 cfg.logging.wandb.project, run, dict(cfg))
+        wb = cfg.logging.get("wandb") or {}          # activation is WANDB_ENABLED's call
+        self.wandb = WandbLogger(wb.get("project", "lloom"), run, dict(cfg))
         self.step, self.best_val, self.no_improve = 0, float("inf"), 0
 
     def _to_device(self, batch):
@@ -81,6 +82,11 @@ class SFTTrainer:
             if self.step % self.cfg.evaluation.eval_interval == 0:
                 if self._validate():
                     print(f"early stop at {self.step}"); break
+        if self.best_val == float("inf"):    # ended before the first eval_interval:
+            if self.val_batches:             # validate once now so best.pt always exists
+                self._validate()             # (adapter save / merge / eval depend on it)
+            else:
+                self._save("best.pt")
         self._save("last.pt"); self.wandb.finish()
 
     @torch.no_grad()

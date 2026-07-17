@@ -58,6 +58,12 @@ class WeightedStreamSampler:
 
     def __init__(self, streams: dict[str, np.ndarray],
                  schedule: MixtureSchedule, seq_len: int, seed: int):
+        for name, s in streams.items():
+            if len(s) < seq_len + 2:     # get_batch needs randint(0, len - seq_len - 1)
+                raise ValueError(
+                    f"token stream '{name}' has {len(s)} tokens < seq_len+2 "
+                    f"({seq_len + 2}); it can't form a single training window - "
+                    f"add data or lower model.max_seq_len")
         self.streams = streams
         self.schedule = schedule
         self.seq_len = seq_len

@@ -44,11 +44,24 @@ def _synthetic_corpus(seed: int = 0) -> str:
     return "\n\n".join(docs)
 
 
+_IGNORED = shutil.ignore_patterns(
+    ".git", "runs", "checkpoints", "logs", "wandb", "__pycache__",
+    "*.egg-info", ".venv", "venv", ".pytest_cache")
+
+
+def _ignore(path, names):
+    """Standard junk everywhere, plus the corpus dir - but only the TOP-LEVEL
+    data/ (a bare "data" pattern would also strip the lloom/data subpackage
+    from the copy and break every stage at `from lloom.data import ...`)."""
+    ignored = set(_IGNORED(path, names))
+    if Path(path).resolve() == ROOT and "data" in names:
+        ignored.add("data")
+    return ignored
+
+
 def run_smoke(tmp: str) -> None:
     work = Path(tmp) / "repo"
-    shutil.copytree(ROOT, work, ignore=shutil.ignore_patterns(
-        ".git", "runs", "checkpoints", "logs", "wandb", "__pycache__",
-        "*.egg-info", ".venv", "venv", ".pytest_cache", "data"))
+    shutil.copytree(ROOT, work, ignore=_ignore)
 
     # Fresh, self-contained data tree (data/ was excluded from the copy).
     (work / "data/raw").mkdir(parents=True)
@@ -90,8 +103,18 @@ def run_smoke(tmp: str) -> None:
     assert res.exists(), f"evaluate did not write {res}"
     data = json.loads(res.read_text())
     assert "perplexity/total" in data, data       # evaluate.py keys perplexity by source/total
+
+    # SFT on the tiny bundled sample: deliberately fewer steps than
+    # eval_interval, so this also guards the end-of-training best.pt guarantee
+    # (adapter save + merge crash without it).
+    run("scripts/finetune_sft_lora.py", "--set", "device=cpu",
+        "--set", "training.epochs=1", "--set", "training.batch_size=2",
+        "--set", "logging.log_interval=1")
+    merged = work / "runs/default/checkpoints/sft_lora/merged.pt"
+    assert merged.exists(), f"sft lora did not produce {merged}"
+
     print("ok scripts smoke (prepare -> tokenizer -> tokenize -> preflight -> "
-          "pretrain -> evaluate; runs/ namespacing intact)")
+          "pretrain -> evaluate -> sft_lora; runs/ namespacing intact)")
 
 
 def test_scripts_smoke() -> None:

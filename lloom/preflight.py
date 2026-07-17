@@ -55,7 +55,8 @@ def check_pretrain(cfg, data_cfg, sources) -> tuple[list[str], list[str]]:
     if model_file.exists():
         try:
             from lloom.tokenizer import SPTokenizer
-            tv = SPTokenizer(tok_dir, prefix).vocab_size
+            tok = SPTokenizer(tok_dir, prefix)
+            tv = tok.vocab_size
             if tv > 65536:
                 errors.append(f"tokenizer vocab {tv} > 65536 won't fit uint16 streams")
             floor = int(cfg.model.get("vocab_size", 0))
@@ -63,6 +64,13 @@ def check_pretrain(cfg, data_cfg, sources) -> tuple[list[str], list[str]]:
                 warnings.append(f"model.vocab_size floor {floor} > tokenizer vocab "
                                 f"{tv}: {floor - tv} embedding rows will never train "
                                 f"(harmless, but lower the floor to save params)")
+            # Span corruption writes the mask sentinel into inputs; without a
+            # mask token it would write id -1 and crash mid-training.
+            obj = cfg.get("objectives") or {}
+            if obj.get("causal_lm_prob", 1.0) < 1.0 and tok.mask_id == -1:
+                errors.append("objectives mix span corruption (causal_lm_prob < 1) "
+                              "but the tokenizer has no <|mask|> token - retrain the "
+                              "tokenizer with it or set objectives.causal_lm_prob: 1.0")
         except Exception as e:  # tokenizer present but unreadable
             warnings.append(f"could not load tokenizer to check vocab ({e})")
 

@@ -8,10 +8,10 @@ numpy>=1.26
 pyyaml>=6.0
 sentencepiece>=0.2.0
 safetensors>=0.4
-tqdm>=4.66
 
-# Optional - training-run logging (set logging.wandb.enabled: false to skip)
-wandb>=0.17
+# Optional - Weights & Biases training-run logging (lloom/wandb_logging.py);
+# inert unless WANDB_ENABLED=1 is set. Install via ".[train]" or uncomment:
+# wandb>=0.17
 
 # Optional - inference server (lloom/infer/server.py); install via ".[serve]"
 # fastapi>=0.110

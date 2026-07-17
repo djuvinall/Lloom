@@ -78,7 +78,7 @@ sampling:
     - "<|prompt|> Explain gravity in one sentence. <|response|>"
 
 checkpoint:
-  save_interval: 500
+  save_interval: 500      # last.pt + rolling step_*.pt cadence (best.pt saves on val improvement)
   keep_last: 5            # plus best.pt, kept forever
 
 early_stopping:
@@ -90,5 +90,6 @@ logging:
   csv_path: runs/${run_name}/logs/metrics.csv
   samples_dir: runs/${run_name}/logs/samples
   wandb:
-    enabled: false        # opt-in with --wandb; local CSV logging is always on
+    # Activation is gated by the WANDB_ENABLED env var (set it to 1, or pass
+    # --wandb to a stage script); local CSV logging is always on regardless.
     project: lloom

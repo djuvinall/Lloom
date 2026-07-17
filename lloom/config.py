@@ -80,8 +80,10 @@ def parse_overrides(sets: list[str] | None) -> dict:
 def resolve_preset(preset: str | Path, preset_dir: str | Path = "config/presets") -> Path:
     """Accept a path ('config/presets/large.yaml') or a bare name ('large')."""
     p = Path(preset)
-    if p.suffix in (".yaml", ".yml") or p.exists():
+    if p.exists():
         return p
+    if p.suffix in (".yaml", ".yml"):
+        raise FileNotFoundError(f"preset file {p} not found")
     cand = Path(preset_dir) / f"{preset}.yaml"
     if cand.exists():
         return cand
@@ -164,7 +166,8 @@ def add_config_args(ap, default_config: str) -> None:
                     metavar="KEY.PATH=VALUE",
                     help="dotted config override, repeatable")
     ap.add_argument("--wandb", action="store_true",
-                    help="enable Weights & Biases logging (off by default; local CSV always on)")
+                    help="enable Weights & Biases logging by setting WANDB_ENABLED=1 "
+                         "for this process (off by default; local CSV always on)")
 
 
 def to_plain(obj):

@@ -36,7 +36,7 @@ _INDEX_HTML = """<!doctype html><html><head><meta charset="utf-8"><title>Lloom</
 const inp=document.getElementById('inp'),out=document.getElementById('out'),go=document.getElementById('go'),qa=document.getElementById('qa');
 async function ask(){
  const t=inp.value.trim(); if(!t)return;
- const prompt=qa.checked?('<|question|> '+t+' <|answer|>'):t;
+ const prompt=qa.checked?('<|prompt|> '+t+' <|response|>'):t;
  go.disabled=true; out.textContent='thinking...';
  try{
   const r=await fetch('/generate',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({prompt:prompt})});

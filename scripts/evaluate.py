@@ -82,7 +82,7 @@ def main():
         if gen_dir == sft_dir:
             print(f"[warn] no held-out generation set in {test_dir} - QA eval runs "
                   f"on TRAINING data ({sft_dir}); treat scores as optimistic")
-        rows = load_sft_pairs(gen_dir)[:cfg.qa.get("max_pairs", 300)]
+        rows = load_sft_pairs(gen_dir, exclude=SPECIAL_JSONL)[:cfg.qa.get("max_pairs", 300)]
         pairs = [{"question": r["prompt"], "answer": r["response"]} for r in rows]
         results.update(ev.evaluate_qa(pairs, str(out_dir / "generations.jsonl"),
                                       prompt_fn=sft_prompt,

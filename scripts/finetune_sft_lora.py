@@ -8,6 +8,7 @@ Usage:
   python scripts/finetune_sft_lora.py --set lora.r=16 --set training.lr=2e-4
 """
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -29,8 +30,8 @@ def main():
     add_config_args(ap, "config/sft_config.yaml")
     args = ap.parse_args()
     cfg = load_config(args.config, preset=args.preset, sets=args.sets)
-    if args.wandb:
-        cfg.logging.wandb.enabled = True
+    if args.wandb:                       # sugar for the real gate (see lloom.wandb_logging)
+        os.environ["WANDB_ENABLED"] = "1"
     set_seed(cfg.seed)
     device = get_device(cfg.device)
 

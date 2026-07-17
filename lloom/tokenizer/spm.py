@@ -8,6 +8,7 @@ the wrapper resolves the conventional pad/eot/mask trio if present.
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import sentencepiece as spm
@@ -22,7 +23,7 @@ def train_spm(input_files: list[str | Path], model_dir: str | Path,
     model_dir = Path(model_dir)
     model_dir.mkdir(parents=True, exist_ok=True)
     prefix = model_dir / model_prefix
-    spm.SentencePieceTrainer.train(
+    kwargs = dict(
         input=",".join(str(p) for p in input_files),
         model_prefix=str(prefix),
         vocab_size=vocab_size,
@@ -33,6 +34,20 @@ def train_spm(input_files: list[str | Path], model_dir: str | Path,
         pad_id=-1, bos_id=-1, eos_id=-1, unk_id=0,
         normalization_rule_name="nfkc",
     )
+    try:
+        spm.SentencePieceTrainer.train(**kwargs)
+    except RuntimeError as e:
+        # Small corpus: SentencePiece reports the maximum trainable vocab in
+        # its error. Clamp to it (loudly) so the pipeline still runs end to
+        # end; set tokenizer_config's vocab_size at or below it to silence.
+        m = re.search(r"set it to a value <=\s*(\d+)", str(e))
+        if not m:
+            raise
+        vocab_size = int(m.group(1))
+        print(f"[tokenizer] configured vocab_size too high for this corpus; "
+              f"clamping to {vocab_size} (SentencePiece's reported maximum)")
+        kwargs["vocab_size"] = vocab_size
+        spm.SentencePieceTrainer.train(**kwargs)
     (model_dir / "tokenizer_config.json").write_text(
         json.dumps({"special_tokens": special_tokens, "vocab_size": vocab_size,
                     "model_type": model_type, "byte_fallback": byte_fallback},

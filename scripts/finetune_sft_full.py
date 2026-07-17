@@ -5,6 +5,7 @@ Usage:
   python scripts/finetune_sft_full.py --set full.training.lr=5e-6
 """
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -23,8 +24,8 @@ def main():
     add_config_args(ap, "config/sft_config.yaml")
     args = ap.parse_args()
     cfg = load_config(args.config, preset=args.preset, sets=args.sets)
-    if args.wandb:
-        cfg.logging.wandb.enabled = True
+    if args.wandb:                       # sugar for the real gate (see lloom.wandb_logging)
+        os.environ["WANDB_ENABLED"] = "1"
     # the `full:` block overrides the shared training defaults (lower LR etc.)
     cfg.training = type(cfg)(deep_merge(cfg.training, cfg.get("full", {}).get("training", {})))
     set_seed(cfg.seed)

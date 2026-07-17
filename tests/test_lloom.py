@@ -314,6 +314,37 @@ stages:
     print("ok pipeline run_name (forwarded --set run_name + ${run_name} interpolation)")
 
 
+def test_wandb_gate():
+    """wandb must be fully inert unless WANDB_ENABLED is truthy: no import,
+    no init, all logger methods no-ops. Enabling must never raise, even with
+    wandb missing or offline."""
+    import os
+    from lloom.wandb_logging import WandbLogger, wandb_enabled
+    saved = {k: os.environ.pop(k, None) for k in ("WANDB_ENABLED", "WANDB_MODE")}
+    try:
+        assert not wandb_enabled()                       # unset -> inert
+        pre = "wandb" in sys.modules
+        lg = WandbLogger("proj", "run", {"a": 1})
+        assert lg.run is None
+        assert ("wandb" in sys.modules) == pre           # gate off -> no import side effect
+        lg.log({"x": 1.0}, 1); lg.log_text("k", "t", 1); lg.finish()   # all no-ops
+        for v in ("", "0", "false", "no"):
+            os.environ["WANDB_ENABLED"] = v
+            assert not wandb_enabled(), v
+        for v in ("1", "true", "YES", "on"):
+            os.environ["WANDB_ENABLED"] = v
+            assert wandb_enabled(), v
+        os.environ["WANDB_MODE"] = "disabled"            # keep wandb offline if installed
+        lg = WandbLogger("proj", "run", {"a": 1})        # enabled: must not raise
+        lg.log({"x": 1.0}, 2); lg.finish()
+    finally:
+        for k, v in saved.items():
+            os.environ.pop(k, None)
+            if v is not None:
+                os.environ[k] = v
+    print("ok wandb gate (inert by default, no import side effect, safe enable)")
+
+
 def test_vocab_mask():
     set_seed(0)
     model = TransformerLM(tiny_cfg(vocab_size=64, tokenizer_vocab_size=40)).eval()
@@ -332,6 +363,7 @@ if __name__ == "__main__":
     test_arch_variants()
     test_kv_cache_equivalence()
     test_generation()
+    test_wandb_gate()
     test_vocab_mask()
     test_sft_packing()
     test_lora()

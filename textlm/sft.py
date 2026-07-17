@@ -29,8 +29,9 @@ def sft_prompt(prompt: str) -> str:
     return f"<|prompt|> {prompt.strip()} <|response|>"
 
 
-def load_sft_pairs(sft_dir, pattern: str = "*.jsonl") -> list[dict]:
-    paths = sorted(Path(sft_dir).glob(pattern))
+def load_sft_pairs(sft_dir, pattern: str = "*.jsonl",
+                   exclude: tuple[str, ...] = ()) -> list[dict]:
+    paths = sorted(p for p in Path(sft_dir).glob(pattern) if p.name not in exclude)
     if not paths:
         raise FileNotFoundError(
             f"no {pattern} in {sft_dir} - add SFT data before finetuning")
