@@ -32,7 +32,7 @@ ruff check .        # lint (matches CI)
 pytest              # framework units + CLI smoke test (CPU, no GPU needed)
 ```
 
-CI runs the same lint + tests on Python 3.10–3.12. PRs need a green check.
+CI runs the same lint + tests on Python 3.10–3.13. PRs need a green check.
 
 - `tests/test_lloom.py` exercises every subsystem on synthetic tensors.
 - `tests/test_scripts_smoke.py` runs the real CLI end to end on a tiny corpus

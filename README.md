@@ -221,8 +221,8 @@ python tests/test_scripts_smoke.py    # full CLI pipeline on a tiny corpus (need
 
 ## Status & roadmap
 
-Alpha (`v0.1.0`). The framework is feature-complete across the pipeline and
-covered by unit + end-to-end CLI tests on Python 3.10–3.12; APIs may still shift
+Alpha (`v0.2.0`). The framework is feature-complete across the pipeline and
+covered by unit + end-to-end CLI tests on Python 3.10–3.13; APIs may still shift
 between minor versions. On the radar:
 
 - Distributed / multi-GPU training (currently single-device)

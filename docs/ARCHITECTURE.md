@@ -170,4 +170,4 @@ Two suites, deliberately split:
   `nano` preset, in a throwaway copy of the repo. It catches the stage-wiring and
   path-handoff bugs that unit tests structurally can't see.
 
-CI runs both on Python 3.10–3.12 with CPU PyTorch, plus a ruff lint gate.
+CI runs both on Python 3.10–3.13 with CPU PyTorch, plus a ruff lint gate.

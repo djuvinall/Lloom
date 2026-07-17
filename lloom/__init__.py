@@ -8,7 +8,7 @@ quantization, pipeline automation).
 Deliberately lightweight at import time: importing `lloom` pulls in no torch.
 Heavy subpackages (lloom.model, lloom.train, ...) are imported explicitly.
 """
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .config import Cfg, deep_merge, load_config, parse_overrides, save_snapshot
 

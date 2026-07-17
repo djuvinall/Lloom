@@ -6,6 +6,8 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-07-17
+
 ### Changed
 - All wandb code now lives in `lloom/wandb_logging.py`, gated by the
   `WANDB_ENABLED` environment variable: unset/falsy means fully inert (no
@@ -40,24 +42,24 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   window; friendlier error for a missing preset file path; the evaluator no
   longer feeds `retrieval_pairs.jsonl` / `themed.jsonl` rows into QA
   generation.
+- Smoke test used `vocab_size: 300` (below SentencePiece's byte-fallback floor) and
+  asserted a non-existent `val/perplexity/total` key; corrected to `512` and
+  `perplexity/total`. Quoted `${run_name}` in the config-interpolation test's
+  flow-mapping YAML so it parses.
 
 ### Removed
 - Unused `tqdm` dependency (was never imported).
 
 ### Added
+- Python 3.13 in the CI test matrix and package classifiers.
 - Apache-2.0 `LICENSE` and `NOTICE`.
-- GitHub Actions CI: ruff lint + pytest on Python 3.10–3.12 (CPU PyTorch).
+- GitHub Actions CI: ruff lint + pytest on Python 3.10–3.13 (CPU PyTorch),
+  on current `actions/checkout` / `actions/setup-python` (Node 24).
 - Packaging metadata in `pyproject.toml`: license, project URLs, classifiers.
 - Community docs: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, issue/PR templates.
 - `docs/ARCHITECTURE.md` design-rationale doc and a README pipeline diagram (Mermaid).
 - `scripts/plot_loss.py` loss-curve plotter + `viz` extra; README Results section.
 - README Status & roadmap section.
-
-### Fixed
-- Smoke test used `vocab_size: 300` (below SentencePiece's byte-fallback floor) and
-  asserted a non-existent `val/perplexity/total` key; corrected to `512` and
-  `perplexity/total`. Quoted `${run_name}` in the config-interpolation test's
-  flow-mapping YAML so it parses.
 
 ## [0.1.0] - 2026-06-19
 
@@ -80,5 +82,6 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `textlm` reference project + Stage 0–5 CLI scripts and preflight validation.
 - Presets: nano, small, base, large, xl, moe.
 
-[Unreleased]: https://github.com/djuvinall/Lloom/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/djuvinall/Lloom/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/djuvinall/Lloom/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/djuvinall/Lloom/releases/tag/v0.1.0
