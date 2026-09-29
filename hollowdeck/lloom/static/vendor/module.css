@@ -1,0 +1,1578 @@
+/* HollowDeck module UI kit -- the third vendored file, after darkglass.css
+ * (tokens) and panel.css (the k-* component layer).
+ *
+ * WHAT THIS IS. Everything a *page* needs that is not a design token and not a
+ * k-panel: the base reset and typography, buttons, inputs, toggles, pills, tags,
+ * tables, diagnostics, stat tiles, field rows, and the one focus ring. It was
+ * extracted from the shell's own stylesheet, where the core panels were reaching
+ * into 600 lines of area-tree geometry to borrow a button -- and where the System
+ * Monitor and the module template had each grown their own drifted copy of the
+ * same handful of rules instead.
+ *
+ * WHAT IT IS NOT. No shell geometry: the dock, areas, gutters, split handles,
+ * the iframe layer, solo mode and widget mode stay in shell.css, because only the
+ * area tree has them. Nothing module-manager-specific either -- that is
+ * panels/panels.css. If a rule is something an unrelated module could plausibly
+ * want, it belongs here; otherwise it does not.
+ *
+ * HOW IT ARRIVES. Vendored, never linked from the core. A module is served under
+ * /m/<id>/ by the host AND at / standalone, and the contract is relative-URLs-only
+ * (docs/arch/modules.md), so a core-served /static/ URL breaks both. The cost is
+ * drift, and it is paid by a test that byte-compares every copy against this file.
+ * Devon confirmed the trade 2026-09-04; see Plans/module-ui-framework/PLAN.md.
+ *
+ * RULE, inherited from panel.css and enforced by tests/test_module_ui.py: no
+ * literal colours outside the bindings block below. Layout geometry (flex, sizes,
+ * opacity) may be literal -- darkglass has no layout tokens.
+ *
+ * Contract for authors: docs/arch/module-ui.md. Starter: docs/module-template/.
+ */
+
+/* bindings */
+/* Aliases a product binds over Dark Glass slots, and the one place a colour the
+ * system does not yet name may be written. Everything below this block resolves to a
+ * semantic token or to one of these aliases.
+ *
+ * P080, the element catalogue. Two kinds of binding:
+ *   * STATES AND CANVAS SLOTS Dark Glass 0.3.0 has no token for, bound to its semantic
+ *     `field.slot*` and surface tokens. Each is filed for Devon in
+ *     tasks/darkglass-requests.md; when a token lands, the alias points at it and
+ *     nothing else changes.
+ *   * SOCKET COLOURS, which are literal: they are the socket type registry's own colours
+ *     (graph_editor/types.py SOCKET_TYPES, Blender's where Blender has the type), and
+ *     tests/test_module_ui.py fails if the two disagree. Dark Glass has no canvas
+ *     emitter yet (its README: canvas.py is planned), so the canvas reads these
+ *     properties at runtime -- docs/arch/ui-elements.md lists every name. */
+:root {
+  /* The wired state: a value arriving on a link. Blender's driven-field purple. */
+  --hd-state-wired: var(--darkglass-field-slot2);
+  /* A factor slider's fill: Blender's value-in-range bar. */
+  --hd-slider-fill: color-mix(in srgb, var(--darkglass-action-primary-rest) 62%, transparent);
+
+  /* Canvas vocabulary -- sockets by base type. */
+  --hd-socket-any: #8C8C8C;
+  --hd-socket-str: #70B2FF;
+  --hd-socket-int: #598C5C;
+  --hd-socket-float: #A1A1A1;
+  --hd-socket-bool: #CCA6D6;
+  --hd-socket-model: #6363C7;
+  --hd-socket-bundle: #E0A458;
+  --hd-socket-item: #4FB8A8;
+  --hd-socket-tool: #ED9E5C;
+  --hd-socket-agent: #E06666;
+  --hd-socket-unknown: #5C5C5C;
+
+  /* ...node headers by category: restrained -- a third of the slot hue over the node
+     ground, so the category reads and the title stays legible. */
+  --hd-node-header-source: color-mix(in srgb, var(--darkglass-field-slot6) 34%, var(--darkglass-surface-elevated));
+  --hd-node-header-transform: color-mix(in srgb, var(--darkglass-field-slot3) 34%, var(--darkglass-surface-elevated));
+  --hd-node-header-parallel: color-mix(in srgb, var(--darkglass-field-slot1) 34%, var(--darkglass-surface-elevated));
+  --hd-node-header-human: color-mix(in srgb, var(--darkglass-field-slot2) 34%, var(--darkglass-surface-elevated));
+  --hd-node-header-sink: color-mix(in srgb, var(--darkglass-field-slot4) 34%, var(--darkglass-surface-elevated));
+  --hd-node-header-model: color-mix(in srgb, var(--darkglass-action-primary-rest) 60%, var(--darkglass-surface-elevated));
+  --hd-node-header-logic: color-mix(in srgb, var(--darkglass-text-tertiary) 30%, var(--darkglass-surface-elevated));
+  --hd-node-header-bundle: color-mix(in srgb, var(--darkglass-field-slot5) 34%, var(--darkglass-surface-elevated));
+  --hd-node-header-default: var(--darkglass-surface-elevated);
+
+  /* ...the node, links, reroutes, frames, the canvas itself. */
+  --hd-node-body: var(--darkglass-surface-base);
+  --hd-node-text: var(--darkglass-text-primary);
+  --hd-node-border: var(--darkglass-border-strong);
+  --hd-node-selected: var(--darkglass-border-focus);
+  --hd-link: var(--darkglass-text-tertiary);
+  --hd-link-selected: var(--darkglass-border-focus);
+  --hd-link-invalid: var(--darkglass-border-error);
+  --hd-reroute: var(--darkglass-text-secondary);
+  --hd-frame-fill: color-mix(in srgb, var(--darkglass-surface-elevated) 55%, transparent);
+  --hd-frame-text: var(--darkglass-text-secondary);
+  --hd-frame-border: var(--darkglass-border-subtle);
+  --hd-canvas-bg: var(--darkglass-surface-sunken);
+  --hd-canvas-grid: var(--darkglass-state-hover);
+}
+/* end bindings */
+
+/* ---------------------------------------------------------------- density + scale (P031)
+ *
+ * Two things live here and they are the same thing seen twice.
+ *
+ * 1. THE REM BASE. Dark Glass emits its dimension and type scales in px, so nothing
+ *    downstream could be resized without `transform: scale()` -- which blurs text at a
+ *    non-integer factor and leaves hit targets off the pixels they are drawn on. The
+ *    scales are therefore restated below in `rem` against one absolute anchor,
+ *    `html`'s font-size, and Resolution Scale moves that anchor. Every control that
+ *    resolves a token then scales, crisply, at any factor. Borders stay in px on
+ *    purpose: a hairline is one device edge, not a proportion, and 0.8px is a smear.
+ *
+ * 2. THE DENSITY PASS. Devon runs browsers at 80% zoom and the app read correctly only
+ *    at 90%. The row and density steps come down ~11% so the vertical rhythm of chrome
+ *    lands where it should. The primitive *space* scale is deliberately untouched: it
+ *    is horizontal rhythm as well, and it belongs to the system rather than to one
+ *    product's density pass.
+ *
+ * AUTHORED HERE, NOT UPSTREAM. `darkglass.css` is a build output -- its own header says
+ * "do not edit by hand" -- emitted from `tokens/*.json` in the Dark Glass repo.
+ * `module.css` is the file this project authors (docs/ui-demos/ITERATING.md). Overriding
+ * here rather than editing a generated file keeps the snapshot's darkglass.css
+ * byte-identical to upstream; decisions.md (2026-09-08) carries the exact values to fold
+ * back into `tokens/*.json`, after which this block shrinks to the two `--hd-*` lines.
+ *
+ * Load order is what makes it work: darkglass.css, panel.css, then this file. Same
+ * specificity, later wins.
+ */
+
+:root {
+  /* Resolution Scale -- Blender's Preferences > Interface > Resolution Scale, same job.
+     The shell writes it on its own root and on every same-origin panel frame; a page
+     opened standalone keeps 1. */
+  --hd-ui-scale: 1;
+  /* The anchor every rem below resolves against. */
+  --hd-ui-base: 16px;
+
+  /* -- the density pass: chrome rows, ~11% down ------------------------------- */
+  --darkglass-density-area-dense: 1.25rem;      /* 22px -> 20px */
+  --darkglass-density-area-default: 1.4375rem;  /* 26px -> 23px */
+  --darkglass-density-area-relaxed: 1.75rem;    /* 32px -> 28px */
+  --darkglass-dimension-row-compact: 1.25rem;   /* 22px -> 20px */
+  --darkglass-dimension-row-default: 1.4375rem; /* 26px -> 23px */
+  --darkglass-dimension-row-comfortable: 1.75rem; /* 32px -> 28px */
+
+  /* -- the same px, made relative: spacing ------------------------------------ */
+  --darkglass-dimension-space-1: 0.125rem;   /* 2px */
+  --darkglass-dimension-space-2: 0.25rem;    /* 4px */
+  --darkglass-dimension-space-3: 0.375rem;   /* 6px */
+  --darkglass-dimension-space-4: 0.5rem;     /* 8px */
+  --darkglass-dimension-space-5: 0.75rem;    /* 12px */
+  --darkglass-dimension-space-6: 1rem;       /* 16px */
+  --darkglass-dimension-space-7: 1.5rem;     /* 24px */
+  --darkglass-dimension-space-8: 2rem;       /* 32px */
+  --darkglass-dimension-space-9: 3rem;       /* 48px */
+  --darkglass-dimension-space-10: 4rem;      /* 64px */
+
+  /* -- ...radius (none and pill are absolutes, not steps) ---------------------- */
+  --darkglass-dimension-radius-sm: 0.25rem;  /* 4px */
+  --darkglass-dimension-radius-md: 0.5rem;   /* 8px */
+  --darkglass-dimension-radius-lg: 0.75rem;  /* 12px */
+
+  /* -- ...and type. Sizes only; weights, tracking and line-heights are ratios
+        already and need no restating. */
+  --darkglass-type-caption-size: 0.6875rem;      /* 11px */
+  --darkglass-type-code-size: 0.75rem;           /* 12px */
+  --darkglass-type-metric-size: 1.75rem;         /* 28px */
+  --darkglass-type-panel-header-size: 0.625rem;  /* 10px */
+  --darkglass-type-row-label-size: 0.8125rem;    /* 13px */
+  --darkglass-type-row-value-size: 0.8125rem;    /* 13px */
+  --darkglass-typography-size-micro: 0.625rem;   /* 10px */
+  --darkglass-typography-size-caption: 0.6875rem;/* 11px */
+  --darkglass-typography-size-body-sm: 0.75rem;  /* 12px */
+  --darkglass-typography-size-body: 0.8125rem;   /* 13px */
+  --darkglass-typography-size-body-lg: 0.9375rem;/* 15px */
+  --darkglass-typography-size-title: 1.125rem;   /* 18px */
+  --darkglass-typography-size-heading: 1.375rem; /* 22px */
+  --darkglass-typography-size-display: 1.75rem;  /* 28px */
+  --darkglass-typography-size-hero: 2.5rem;      /* 40px */
+}
+
+/* Chrome strips lose a step of vertical padding; the body keeps its own, because panel
+   *contents* are P032's pass and not this one. */
+.k-panel__header,
+.k-panel__footer {
+  padding-top: var(--darkglass-dimension-space-2);
+  padding-bottom: var(--darkglass-dimension-space-2);
+}
+
+/* ---------------------------------------------------------------- one name per view (P031)
+ *
+ * A view showed its name three times: in the area header's dropdown, again in the meta
+ * slot beside it, and a third time as the panel's own header. The dropdown is the
+ * control that *changes* the view, so it is the one place the name does work; the other
+ * two cost a row of vertical space to say something already on screen.
+ *
+ * The panel header still earns its line -- a count, a path, a status badge, an action --
+ * so only the title goes, and only when the shell is showing this page. `data-view-title`
+ * is the author saying "this repeats the name of the view", and the shell adds
+ * `hdeck-in-shell` to the frame's body. Opened standalone the class is absent and the
+ * title is the page's only name, which is why this is not simply deleted from the markup.
+ *
+ * The title element keeps doing its layout job when hidden: whatever follows it takes
+ * the free space, and the last thing in the header is pushed to the far edge. */
+body.hdeck-in-shell .k-panel__title[data-view-title] { display: none; }
+body.hdeck-in-shell .k-panel__title[data-view-title] ~ .k-caption {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+body.hdeck-in-shell .k-panel__header:has(.k-panel__title[data-view-title]) > :last-child {
+  margin-left: auto;
+}
+
+/* ---------------------------------------------------------------- base */
+
+* { box-sizing: border-box; }
+
+html {
+  /* Native controls (select popups, scrollbars) follow the dark ground instead of
+     rendering a white popup over a dark page. Module pages did not have this
+     before the kit -- a scrolling panel got a light scrollbar. */
+  color-scheme: dark;
+  scrollbar-color: var(--darkglass-border-subtle) transparent;
+  scrollbar-width: thin;
+}
+
+html, body {
+  margin: 0;
+  background: var(--darkglass-surface-sunken);
+  color: var(--darkglass-text-secondary);
+  font-family: var(--darkglass-typography-family-sans);
+  line-height: var(--darkglass-typography-line-height-snug);
+}
+
+/* THE REM ANCHOR (P031), and the two rules have to be in this order and on these two
+   elements. `rem` on `html` itself resolves against the *inherited* size, so a single
+   `html, body { font-size: <a rem token> }` collapses: the root lands at 13px and the
+   body at 13 x 0.8125. Pinned in px rather than left at the browser default so a
+   non-16px default font does not silently rescale every token -- browser zoom still
+   scales this px, which is exactly right, because that is the user asking. */
+html { font-size: calc(var(--hd-ui-base) * var(--hd-ui-scale)); }
+body { font-size: var(--darkglass-typography-size-body); }
+
+[hidden] { display: none !important; }
+
+code, pre, .mono { font-family: var(--darkglass-typography-family-mono); }
+a { color: var(--darkglass-text-accent); }
+p { margin: 0; }
+
+/* The page a panel lives on: one column, centred, scrolling on its own. */
+.panel-page {
+  padding: var(--darkglass-dimension-space-6);
+  display: flex; flex-direction: column; gap: var(--darkglass-dimension-space-6);
+  max-width: 68.75rem; margin: 0 auto; width: 100%;
+  overflow-y: auto; height: 100%;
+}
+body.panel { overflow: auto; }
+
+/* ---------------------------------------------------------------- buttons + inputs */
+
+.btn {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--darkglass-dimension-space-2);
+  font: inherit;
+  line-height: 1.3;
+  color: var(--darkglass-text-secondary);
+  background: var(--darkglass-action-secondary-rest);
+  border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle);
+  border-radius: var(--darkglass-dimension-radius-sm);
+  padding: var(--darkglass-dimension-space-2) var(--darkglass-dimension-space-4);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing),
+              background-color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing),
+              color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing);
+}
+.btn:hover { background: var(--darkglass-action-secondary-hover); border-color: var(--darkglass-border-strong); color: var(--darkglass-text-primary); }
+.btn:active { background: var(--darkglass-state-active); }
+.btn.primary { background: var(--darkglass-action-primary-rest); border-color: var(--darkglass-color-primary-700); color: var(--darkglass-text-on-fill); }
+.btn.primary:hover { background: var(--darkglass-action-primary-hover); }
+.btn.primary:active { background: var(--darkglass-action-primary-active); }
+.btn.ghost { background: transparent; }
+.btn.ghost:hover { background: var(--darkglass-state-hover); }
+.btn.danger { color: var(--darkglass-text-error); }
+.btn.danger:hover { border-color: var(--darkglass-border-error); color: var(--darkglass-text-error); }
+.btn.icon {
+  padding: 0 var(--darkglass-dimension-space-2);
+  min-width: var(--darkglass-dimension-row-compact);
+  height: var(--darkglass-dimension-row-compact);
+  line-height: 1;
+  font-size: var(--darkglass-typography-size-body-sm);
+}
+.btn:disabled, .btn[disabled] { opacity: .45; cursor: not-allowed; }
+.btn:disabled:hover { background: var(--darkglass-action-secondary-rest); border-color: var(--darkglass-border-subtle); color: var(--darkglass-text-secondary); }
+.btn.ghost:disabled:hover { background: transparent; }
+
+.input, select.input {
+  font: inherit;
+  color: var(--darkglass-text-primary);
+  background: var(--darkglass-surface-inset);
+  border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle);
+  border-radius: var(--darkglass-dimension-radius-sm);
+  padding: var(--darkglass-dimension-space-2) var(--darkglass-dimension-space-3);
+  min-width: 0;
+  transition: border-color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing);
+}
+select.input { cursor: pointer; }
+select.input optgroup { font-style: normal; font-weight: var(--darkglass-typography-weight-medium); color: var(--darkglass-text-tertiary); }
+select.input option { color: var(--darkglass-text-primary); font-weight: var(--darkglass-typography-weight-regular); }
+.input::placeholder { color: var(--darkglass-text-disabled); }
+.input:hover, select.input:hover { border-color: var(--darkglass-border-strong); }
+.input:focus, select.input:focus { border-color: var(--darkglass-border-focus); }
+.input:disabled { color: var(--darkglass-text-disabled); cursor: not-allowed; }
+
+/* ONE focus ring, from the token pair panel.css already uses. Keyboard-first
+   (decision 11): this is not decoration. If you must remove it from a control, put
+   an equally visible one back -- and the shell's own .gutter and .area rings are
+   deliberately NOT folded in here, because they use a negative offset to sit inside
+   a divider rather than outside a control. */
+.btn:focus-visible,
+.input:focus-visible,
+.toggle:focus-visible,
+.k-panel__action:focus-visible,
+.k-row[tabindex]:focus-visible {
+  outline: var(--darkglass-dimension-border-focus) solid var(--darkglass-state-focus-ring);
+  outline-offset: var(--darkglass-dimension-space-1);
+}
+
+.toggle {
+  position: relative; width: 1.875rem; height: 1rem; border-radius: var(--darkglass-dimension-radius-pill);
+  background: var(--darkglass-surface-inset); border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle);
+  flex: none; cursor: pointer; appearance: none; padding: 0;
+  transition: border-color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing),
+              background-color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing);
+}
+.toggle::after {
+  content: ""; position: absolute; top: 1px; left: 1px; width: 0.75rem; height: 0.75rem; border-radius: 50%;
+  background: var(--darkglass-text-tertiary);
+  transition: transform var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing),
+              background-color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing);
+}
+.toggle:hover { border-color: var(--darkglass-border-strong); }
+.toggle.on { border-color: var(--darkglass-text-success); background: var(--darkglass-state-selected); }
+.toggle.on::after { transform: translateX(0.875rem); background: var(--darkglass-text-success); }
+.toggle:disabled { opacity: .45; cursor: not-allowed; }
+
+/* ---------------------------------------------------------------- labels + status */
+
+/* Shared with the shell's dock tag, which adds a status dot on top of this body. */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-2);
+  font-size: var(--darkglass-typography-size-micro);
+  color: var(--darkglass-text-tertiary);
+  border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle);
+  border-radius: var(--darkglass-dimension-radius-pill);
+  padding: 0 var(--darkglass-dimension-space-3);
+  line-height: 1.125rem;
+  text-transform: uppercase;
+  letter-spacing: var(--darkglass-typography-tracking-wide);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.pill {
+  display: inline-flex; align-items: center; gap: var(--darkglass-dimension-space-1);
+  padding: 1px var(--darkglass-dimension-space-3);
+  border-radius: var(--darkglass-dimension-radius-pill);
+  font-size: var(--darkglass-typography-size-micro);
+  text-transform: uppercase; letter-spacing: var(--darkglass-typography-tracking-wide);
+  border: var(--darkglass-dimension-border-hairline) solid currentColor;
+  color: var(--darkglass-text-tertiary);
+  white-space: nowrap;
+}
+.pill.state-loaded { color: var(--darkglass-text-success); }
+.pill.state-disabled { color: var(--darkglass-text-disabled); }
+.pill.state-error, .pill.state-invalid, .pill.state-conflict { color: var(--darkglass-text-error); }
+.pill.state-pending { color: var(--darkglass-text-accent); }
+
+.pane-title, h3.section {
+  margin: 0;
+  font-size: var(--darkglass-type-panel-header-size);
+  font-weight: var(--darkglass-type-panel-header-weight);
+  letter-spacing: var(--darkglass-type-panel-header-tracking);
+  text-transform: uppercase;
+  color: var(--darkglass-text-tertiary);
+}
+.pane-hint, .hint { color: var(--darkglass-text-tertiary); font-size: var(--darkglass-typography-size-caption); margin: 0; }
+.pane-hint b { color: var(--darkglass-text-secondary); font-weight: var(--darkglass-typography-weight-medium); }
+.k-caption { color: var(--darkglass-text-tertiary); font-size: var(--darkglass-type-caption-size); font-variant-numeric: tabular-nums; }
+
+/* The empty state. panel.css paints .k-panel__empty; these are the two lines
+   inside it. An empty view that does not say what would fill it is a dead end --
+   see docs/arch/module-ui.md. */
+.empty-title {
+  color: var(--darkglass-text-primary);
+  font-size: var(--darkglass-typography-size-body);
+  font-weight: var(--darkglass-typography-weight-medium);
+  overflow-wrap: anywhere;
+}
+.empty-title b {
+  color: var(--darkglass-text-warning);
+  font-family: var(--darkglass-typography-family-mono);
+  font-weight: var(--darkglass-typography-weight-medium);
+}
+.empty-hint {
+  color: var(--darkglass-text-tertiary);
+  font-size: var(--darkglass-typography-size-body-sm);
+  overflow-wrap: anywhere;
+}
+
+/* ---------------------------------------------------------------- tables */
+
+.table-wrap { overflow-x: auto; }
+.k-panel__body--flush { padding: 0; gap: 0; }
+
+.hdeck-table { width: 100%; border-collapse: collapse; font-size: var(--darkglass-typography-size-body-sm); }
+.hdeck-table th {
+  text-align: left; font-size: var(--darkglass-typography-size-micro); text-transform: uppercase;
+  letter-spacing: var(--darkglass-typography-tracking-wide); color: var(--darkglass-text-tertiary);
+  font-weight: var(--darkglass-typography-weight-medium);
+  padding: var(--darkglass-dimension-space-3) var(--darkglass-dimension-space-4);
+  border-bottom: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle);
+  white-space: nowrap;
+}
+.hdeck-table td {
+  padding: var(--darkglass-dimension-space-4);
+  border-bottom: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle);
+  vertical-align: top; color: var(--darkglass-text-secondary);
+}
+.hdeck-table tbody tr:hover td { background: var(--darkglass-state-hover); }
+/* A row and its detail row are one unit: no divider between them, no hover on the
+   detail, and the detail is not padded away from the row it explains. */
+.hdeck-table tr.has-detail td { border-bottom: 0; }
+.hdeck-table tr.row-detail td { padding-top: 0; }
+.hdeck-table tr.row-detail:hover td { background: transparent; }
+.hdeck-name { color: var(--darkglass-text-primary); font-weight: var(--darkglass-typography-weight-medium); }
+.mono-sm { font-family: var(--darkglass-typography-family-mono); font-size: var(--darkglass-typography-size-caption); color: var(--darkglass-text-tertiary); overflow-wrap: anywhere; }
+.actions { display: flex; gap: var(--darkglass-dimension-space-2); flex-wrap: wrap; align-items: center; }
+
+.req-list { display: flex; flex-wrap: wrap; gap: var(--darkglass-dimension-space-1); align-items: center; }
+.req-list .pill { text-transform: none; letter-spacing: normal; font-family: var(--darkglass-typography-family-mono); }
+
+/* ---------------------------------------------------------------- diagnostics */
+
+/* The error state. The reason goes in UNABBREVIATED -- a panel that swallows the
+   cause of its own failure is worse than one showing an ugly message. */
+.diag {
+  border-radius: var(--darkglass-dimension-radius-sm);
+  padding: var(--darkglass-dimension-space-3) var(--darkglass-dimension-space-4);
+  font-size: var(--darkglass-typography-size-body-sm);
+  border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle);
+  color: var(--darkglass-text-secondary);
+  display: flex; gap: var(--darkglass-dimension-space-3); align-items: flex-start;
+  overflow-wrap: anywhere;
+}
+.diag > span:first-child { flex: none; font-weight: var(--darkglass-typography-weight-bold); }
+.diag > div { min-width: 0; }
+.diag.info { border-color: var(--darkglass-text-accent); color: var(--darkglass-text-accent); background: color-mix(in srgb, var(--darkglass-text-accent) 10%, transparent); }
+.diag.ok { border-color: var(--darkglass-text-success); color: var(--darkglass-text-success); background: color-mix(in srgb, var(--darkglass-text-success) 10%, transparent); }
+.diag.warning { border-color: var(--darkglass-text-warning); color: var(--darkglass-text-warning); background: color-mix(in srgb, var(--darkglass-text-warning) 10%, transparent); }
+.diag.error { border-color: var(--darkglass-text-error); color: var(--darkglass-text-error); background: color-mix(in srgb, var(--darkglass-text-error) 10%, transparent); }
+
+/* Every problem reported, readable and wrapped -- the page you go to when something
+   is wrong must not truncate the reason. */
+.problem-list { display: flex; flex-direction: column; gap: var(--darkglass-dimension-space-2); margin: 0; padding: 0; list-style: none; }
+.problem-list li {
+  display: flex; gap: var(--darkglass-dimension-space-3); align-items: flex-start;
+  padding: var(--darkglass-dimension-space-2) var(--darkglass-dimension-space-3);
+  border-radius: var(--darkglass-dimension-radius-sm);
+  border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-error);
+  background: color-mix(in srgb, var(--darkglass-text-error) 8%, transparent);
+  color: var(--darkglass-text-error);
+  font-family: var(--darkglass-typography-family-mono);
+  font-size: var(--darkglass-type-code-size);
+  white-space: pre-wrap; overflow-wrap: anywhere;
+}
+.problem-list li::before { content: "!"; flex: none; font-weight: var(--darkglass-typography-weight-bold); }
+
+.block {
+  background: var(--darkglass-surface-inset);
+  border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle);
+  border-radius: var(--darkglass-dimension-radius-sm);
+  padding: var(--darkglass-dimension-space-4);
+  font-family: var(--darkglass-typography-family-mono);
+  font-size: var(--darkglass-type-code-size);
+  white-space: pre-wrap; word-break: break-word; margin: 0; max-height: 16.25rem; overflow: auto;
+  color: var(--darkglass-text-secondary);
+}
+
+/* ---------------------------------------------------------------- forms + stats */
+
+.field-row { display: flex; align-items: center; gap: var(--darkglass-dimension-space-3); flex-wrap: wrap; }
+.field-row label { color: var(--darkglass-text-tertiary); font-size: var(--darkglass-typography-size-caption); flex: none; }
+.field-row .input.grow { flex: 1; min-width: 17.5rem; }
+
+.stat-strip { display: flex; gap: var(--darkglass-dimension-space-5); flex-wrap: wrap; }
+.stat { flex: 1; min-width: 8.75rem; }
+.stat .metric {
+  font-size: var(--darkglass-type-metric-size);
+  font-weight: var(--darkglass-type-metric-weight);
+  line-height: var(--darkglass-type-metric-line-height);
+  color: var(--darkglass-text-primary);
+  font-variant-numeric: tabular-nums;
+  transition: color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing);
+}
+/* Two ways to say the same thing, both kept on purpose: the attribute form carries
+   a warning tier and is what a live-updating metric should use; .is-error is the
+   older class form, still set by the module manager. */
+.stat .metric[data-level="warning"] { color: var(--darkglass-text-warning); }
+.stat .metric[data-level="error"], .stat .metric.is-error { color: var(--darkglass-text-error); }
+.stat .label { color: var(--darkglass-text-tertiary); font-size: var(--darkglass-typography-size-caption); text-transform: uppercase; letter-spacing: var(--darkglass-typography-tracking-wide); }
+
+/* ---------------------------------------------------------------- scrollbar */
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--darkglass-border-subtle); border-radius: var(--darkglass-dimension-radius-pill); border: 2px solid transparent; background-clip: padding-box; }
+::-webkit-scrollbar-thumb:hover { background: var(--darkglass-border-strong); background-clip: padding-box; }
+
+/* ================================================================ the element catalogue (P080)
+ *
+ * The styles of kit.js's elements (<hd-number>, <hd-text>, <hd-enum>, <hd-panel>, ...).
+ * Light DOM, so these are ordinary rules over ordinary children; the specification,
+ * element by element with its Blender citation, is docs/arch/ui-elements.md.
+ *
+ * STATES. Every element that has them draws the nine: normal, hover, pressed, focused
+ * (keyboard), active/selected, disabled, WIRED (the value arrives on a link -- Blender's
+ * driven-field colour), invalid, loading. The first three are pseudo-classes; the UI
+ * Gallery forces them for its screenshots with `data-hd-state="hover pressed focus
+ * active"` on the host, which is why each such rule names both. The other states are
+ * attributes on the host: [disabled] [wired] [invalid] [loading].
+ *
+ * COLOUR is semantic tokens only (surface, state, text, border, action, layer, meter,
+ * field.slot) plus the aliases in the bindings block above. Sizes are rem or tokens;
+ * px only for hairlines, the one device edge. Nothing is smaller than the micro size.
+ */
+
+/* ---------------------------------------------------------------- shared */
+
+hd-number, hd-text, hd-enum, hd-select, hd-color, hd-path, hd-hotkey,
+hd-list, hd-tree, hd-asset-grid, hd-growing-list, hd-tabs, hd-props,
+hd-report, hd-progress, hd-modal-header { display: block; min-width: 0; }
+hd-button, hd-toggle, hd-checkbox, hd-radio-row, hd-socket, hd-view-switcher,
+hd-region-toggle, hd-status-hints, hd-menubar { display: inline-flex; align-items: center; min-width: 0; }
+hd-menu, hd-menu-item, hd-menu-separator, hd-menu-heading, hd-pie, hd-popover,
+hd-search-menu, hd-item, hd-node, hd-asset, hd-tab { display: none; }
+
+.hd-icon { display: inline-flex; align-items: center; justify-content: center; line-height: 1; }
+.hd-icon[hidden] { display: none; }
+.hd-accel { text-decoration: underline; text-underline-offset: 0.15em; text-decoration-thickness: var(--darkglass-dimension-border-hairline); }
+
+/* The duplicate label a field keeps for property columns (hd-props); hidden elsewhere,
+   where the label sits inside the field as Blender draws it. */
+:is(hd-number, hd-text, hd-enum, hd-select, hd-color, hd-hotkey) > .hd-field__label { display: none; }
+.hd-field__label {
+  color: var(--darkglass-text-tertiary);
+  font-size: var(--darkglass-typography-size-caption);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---------------------------------------------------------------- the field box
+ * One look for every value field: number, text, the closed dropdown and selector, the
+ * colour swatch, the key-capture button. */
+
+.hd-num, .hd-txt, .hd-choice {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-3);
+  width: 100%;
+  height: var(--darkglass-dimension-row-default);
+  padding: 0 var(--darkglass-dimension-space-3);
+  background: var(--darkglass-surface-inset);
+  border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle);
+  border-radius: var(--darkglass-dimension-radius-sm);
+  color: var(--darkglass-text-primary);
+  font: inherit;
+  font-size: var(--darkglass-typography-size-body-sm);
+  font-variant-numeric: tabular-nums;
+  text-align: left;
+  overflow: hidden;
+  transition: border-color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing),
+              background-color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing);
+}
+.hd-choice { appearance: none; cursor: pointer; }
+
+/* hover */
+.hd-num:hover, .hd-txt:hover, .hd-choice:hover,
+[data-hd-state~="hover"] > :is(.hd-num, .hd-txt, .hd-choice),
+hd-path[data-hd-state~="hover"] .hd-txt {
+  border-color: var(--darkglass-border-strong);
+  background: linear-gradient(var(--darkglass-state-hover) 0 0), var(--darkglass-surface-inset);
+}
+/* pressed: mid-drag, or a dropdown being pressed */
+hd-number[data-hd-dragging] > .hd-num, .hd-choice:active,
+[data-hd-state~="pressed"] > :is(.hd-num, .hd-txt, .hd-choice) {
+  border-color: var(--darkglass-border-focus);
+  background: linear-gradient(var(--darkglass-state-active) 0 0), var(--darkglass-surface-inset);
+}
+/* focused (keyboard) */
+.hd-num:focus-visible, .hd-choice:focus-visible, .hd-txt:has(.hd-txt__input:focus-visible),
+[data-hd-state~="focus"] > :is(.hd-num, .hd-txt, .hd-choice),
+hd-path[data-hd-state~="focus"] .hd-txt {
+  outline: var(--darkglass-dimension-border-focus) solid var(--darkglass-state-focus-ring);
+  outline-offset: var(--darkglass-dimension-space-1);
+}
+/* active: being typed into, or open */
+:is(hd-number, hd-text, hd-hotkey)[data-editing] > :is(.hd-num, .hd-txt, .hd-choice),
+:is(hd-enum, hd-select, hd-color)[data-open] > .hd-choice,
+[data-hd-state~="active"] > :is(.hd-num, .hd-txt, .hd-choice),
+hd-path[data-hd-state~="active"] .hd-txt {
+  border-color: var(--darkglass-border-focus);
+  background: var(--darkglass-surface-sunken);
+}
+/* disabled */
+:is(hd-number, hd-text, hd-enum, hd-select, hd-color, hd-hotkey, hd-path)[disabled] :is(.hd-num, .hd-txt, .hd-choice) {
+  opacity: .45;
+  cursor: not-allowed;
+}
+/* wired: the value arrives on a link and cannot be edited here */
+:is(hd-number, hd-text, hd-enum, hd-select, hd-color, hd-path)[wired] :is(.hd-num, .hd-txt, .hd-choice) {
+  border-color: var(--hd-state-wired);
+  background: color-mix(in srgb, var(--hd-state-wired) 16%, var(--darkglass-surface-inset));
+  color: var(--darkglass-text-secondary);
+  cursor: default;
+}
+:is(hd-number, hd-text, hd-enum, hd-select, hd-color)[wired] :is(.hd-num__value, .hd-txt__input, .hd-choice__value, .hd-color__hex) { color: var(--hd-state-wired); font-style: italic; }
+/* invalid */
+:is(hd-number, hd-text, hd-enum, hd-select, hd-color, hd-hotkey, hd-path)[invalid] :is(.hd-num, .hd-txt, .hd-choice) {
+  border-color: var(--darkglass-border-error);
+}
+:is(hd-number, hd-text, hd-enum, hd-select)[invalid] :is(.hd-num__value, .hd-txt__input, .hd-choice__value) { color: var(--darkglass-text-error); }
+/* loading: the skeleton shimmer, inside the field's own shape (panel.css's keyframes) */
+:is(hd-number, hd-text, hd-enum, hd-select, hd-color, hd-path)[loading] :is(.hd-num, .hd-txt, .hd-choice) {
+  color: transparent;
+  pointer-events: none;
+}
+:is(hd-number, hd-text, hd-enum, hd-select, hd-color, hd-path)[loading] :is(.hd-num, .hd-txt, .hd-choice) * { visibility: hidden; }
+:is(hd-number, hd-text, hd-enum, hd-select, hd-color, hd-path)[loading] :is(.hd-num, .hd-txt, .hd-choice)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--darkglass-state-active), transparent);
+  animation: k-shimmer var(--darkglass-motion-duration-deliberate) var(--darkglass-transition-state-easing) infinite;
+}
+
+/* ---------------------------------------------------------------- hd-number (element 2) */
+
+.hd-num { cursor: ew-resize; user-select: none; -webkit-user-select: none; touch-action: none; gap: var(--darkglass-dimension-space-2); }
+.hd-num__label {
+  position: relative;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--darkglass-text-secondary);
+}
+.hd-num__value { position: relative; flex: none; margin-left: auto; white-space: nowrap; }
+.hd-num__label[hidden] + .hd-num__value { margin: 0 auto; }
+.hd-num__arrow {
+  position: relative;
+  flex: none;
+  appearance: none;
+  width: 1rem;
+  height: 100%;
+  margin: 0 calc(-1 * var(--darkglass-dimension-space-2));
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--darkglass-text-tertiary);
+  font: inherit;
+  font-size: var(--darkglass-typography-size-body);
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+}
+.hd-num__arrow[hidden] { display: none; }
+.hd-num:hover .hd-num__arrow, .hd-num:focus-visible .hd-num__arrow,
+hd-number[data-hd-state~="hover"] > .hd-num .hd-num__arrow, hd-number[data-hd-state~="focus"] > .hd-num .hd-num__arrow { opacity: 1; }
+.hd-num__arrow:hover { color: var(--darkglass-text-primary); background: var(--darkglass-state-hover); }
+.hd-num__fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: var(--hd-slider-fill);
+  pointer-events: none;
+}
+.hd-num__fill[hidden] { display: none; }
+.hd-num__input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  padding: 0 var(--darkglass-dimension-space-3);
+  border: 0;
+  background: var(--darkglass-surface-sunken);
+  color: var(--darkglass-text-primary);
+  font: inherit;
+  outline: none;
+  cursor: text;
+}
+.hd-num__input[aria-invalid="true"] { color: var(--darkglass-text-error); }
+/* Collected by a multi-drag (press on one field, drag down across others). */
+hd-number[data-hd-multi] > .hd-num { border-color: var(--darkglass-border-focus); background: linear-gradient(var(--darkglass-state-active) 0 0), var(--darkglass-surface-inset); }
+hd-number[wired] .hd-num__arrow, hd-number[disabled] .hd-num__arrow { visibility: hidden; }
+
+/* ---------------------------------------------------------------- hd-text (element 3) */
+
+.hd-txt { cursor: text; }
+.hd-txt__label {
+  flex: none;
+  color: var(--darkglass-text-secondary);
+  white-space: nowrap;
+}
+.hd-txt__label[hidden] { display: none; }
+.hd-txt__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--darkglass-text-primary);
+  font: inherit;
+  outline: none;
+  text-overflow: ellipsis;
+}
+.hd-txt__input.mono { font-family: var(--darkglass-typography-family-mono); font-size: var(--darkglass-type-code-size); }
+.hd-txt__input::placeholder { color: var(--darkglass-text-disabled); }
+.hd-txt__input:read-only { cursor: text; }
+.hd-txt__input:disabled { cursor: not-allowed; color: var(--darkglass-text-disabled); }
+
+/* ---------------------------------------------------------------- choice (element 4) */
+
+.hd-choice__label { flex: none; color: var(--darkglass-text-secondary); white-space: nowrap; }
+.hd-choice__label[hidden], .hd-choice__icon[hidden] { display: none; }
+.hd-choice__icon { flex: none; color: var(--darkglass-text-accent); }
+.hd-choice__value { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hd-choice__value.is-placeholder { color: var(--darkglass-text-disabled); }
+.hd-choice__caret { flex: none; margin-left: auto; color: var(--darkglass-text-tertiary); font-size: var(--darkglass-typography-size-caption); }
+.hd-choice:disabled { cursor: not-allowed; }
+
+.hd-color__swatch {
+  flex: none;
+  width: 1.75rem;
+  height: 0.875rem;
+  border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-strong);
+  border-radius: var(--darkglass-dimension-radius-sm);
+}
+.hd-color__hex { font-family: var(--darkglass-typography-family-mono); font-size: var(--darkglass-type-code-size); color: var(--darkglass-text-secondary); }
+.hd-color__picker { display: flex; gap: var(--darkglass-dimension-space-5); padding: var(--darkglass-dimension-space-5); width: 26rem; }
+.hd-color__wheelbox { position: relative; flex: none; width: 9.375rem; height: 9.375rem; }
+.hd-color__wheel { display: block; width: 9.375rem; height: 9.375rem; border-radius: 50%; cursor: crosshair; }
+.hd-color__wheel:focus-visible { outline: var(--darkglass-dimension-border-focus) solid var(--darkglass-state-focus-ring); outline-offset: var(--darkglass-dimension-space-1); }
+.hd-color__mark {
+  position: absolute;
+  width: 0.625rem;
+  height: 0.625rem;
+  margin: -0.3125rem 0 0 -0.3125rem;
+  border: var(--darkglass-dimension-border-focus) solid var(--darkglass-text-primary);
+  border-radius: 50%;
+  box-shadow: 0 0 0 var(--darkglass-dimension-border-hairline) var(--darkglass-surface-sunken);
+  pointer-events: none;
+}
+.hd-color__fields { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--darkglass-dimension-space-2); }
+
+/* The radio row: Blender's expanded enum, one joined strip. */
+hd-radio-row { gap: var(--darkglass-dimension-space-3); }
+hd-radio-row > .hd-field__label { display: inline; }
+.hd-radio { display: inline-flex; }
+.hd-radio__opt {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-2);
+  height: var(--darkglass-dimension-row-default);
+  padding: 0 var(--darkglass-dimension-space-4);
+  border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle);
+  background: var(--darkglass-action-secondary-rest);
+  color: var(--darkglass-text-secondary);
+  font: inherit;
+  font-size: var(--darkglass-typography-size-body-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.hd-radio__opt + .hd-radio__opt { margin-left: calc(-1 * var(--darkglass-dimension-border-hairline)); }
+.hd-radio__opt:first-child { border-radius: var(--darkglass-dimension-radius-sm) 0 0 var(--darkglass-dimension-radius-sm); }
+.hd-radio__opt:last-child { border-radius: 0 var(--darkglass-dimension-radius-sm) var(--darkglass-dimension-radius-sm) 0; }
+.hd-radio__opt:hover, hd-radio-row[data-hd-state~="hover"] .hd-radio__opt:nth-child(2) { background: var(--darkglass-action-secondary-hover); color: var(--darkglass-text-primary); }
+.hd-radio__opt:active, hd-radio-row[data-hd-state~="pressed"] .hd-radio__opt:nth-child(2) { background: var(--darkglass-state-active); }
+.hd-radio__opt[aria-checked="true"] {
+  position: relative;
+  z-index: 1;
+  background: var(--darkglass-action-primary-rest);
+  border-color: var(--darkglass-action-primary-hover);
+  color: var(--darkglass-text-on-fill);
+}
+.hd-radio__opt:focus-visible, hd-radio-row[data-hd-state~="focus"] .hd-radio__opt[aria-checked="true"] {
+  z-index: 2;
+  outline: var(--darkglass-dimension-border-focus) solid var(--darkglass-state-focus-ring);
+  outline-offset: var(--darkglass-dimension-space-1);
+}
+.hd-radio__opt:disabled { opacity: .45; cursor: not-allowed; }
+hd-radio-row[wired] .hd-radio__opt { border-color: var(--hd-state-wired); cursor: default; }
+hd-radio-row[wired] .hd-radio__opt[aria-checked="true"] { background: color-mix(in srgb, var(--hd-state-wired) 45%, var(--darkglass-surface-inset)); }
+
+/* The path field: a text field and a browse button, and a drop target. */
+.hd-path { display: flex; gap: var(--darkglass-dimension-space-2); align-items: center; }
+.hd-path > hd-text { flex: 1 1 auto; }
+.hd-path__picker { position: absolute; width: var(--darkglass-dimension-border-hairline); height: var(--darkglass-dimension-border-hairline); opacity: 0; pointer-events: none; }
+
+/* ---------------------------------------------------------------- buttons (element 1) */
+
+hd-button > .btn, hd-toggle > .btn { height: var(--darkglass-dimension-row-default); }
+hd-button > .btn.icon, hd-toggle > .btn.icon { min-width: var(--darkglass-dimension-row-default); padding: 0 var(--darkglass-dimension-space-2); font-size: var(--darkglass-typography-size-body); }
+.btn:active, hd-button[data-hd-state~="pressed"] > .btn, hd-toggle[data-hd-state~="pressed"] > .btn {
+  background: var(--darkglass-state-active);
+  border-color: var(--darkglass-border-focus);
+}
+:is(hd-button, hd-toggle)[data-hd-state~="hover"] > .btn {
+  background: var(--darkglass-action-secondary-hover);
+  border-color: var(--darkglass-border-strong);
+  color: var(--darkglass-text-primary);
+}
+hd-button[data-hd-state~="hover"] > .btn.primary { background: var(--darkglass-action-primary-hover); }
+hd-button[data-hd-state~="hover"] > .btn.danger, .btn.danger:hover { border-color: var(--darkglass-border-error); color: var(--darkglass-text-error); }
+hd-button[data-hd-state~="pressed"] > .btn.primary, .btn.primary:active { background: var(--darkglass-action-primary-active); }
+:is(hd-button, hd-toggle)[data-hd-state~="focus"] > .btn {
+  outline: var(--darkglass-dimension-border-focus) solid var(--darkglass-state-focus-ring);
+  outline-offset: var(--darkglass-dimension-space-1);
+}
+.btn[aria-busy] { position: relative; overflow: hidden; cursor: progress; opacity: 1; }
+.btn[aria-busy]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--darkglass-state-active), transparent);
+  animation: k-shimmer var(--darkglass-motion-duration-deliberate) var(--darkglass-transition-state-easing) infinite;
+}
+.btn.hd-toggle[aria-pressed="true"], hd-toggle[data-hd-state~="active"] > .btn {
+  background: var(--darkglass-state-selected);
+  border-color: var(--darkglass-border-focus);
+  color: var(--darkglass-text-primary);
+}
+hd-toggle[wired] > .btn { border-color: var(--hd-state-wired); cursor: default; }
+hd-toggle[wired] > .btn[aria-pressed="true"] { background: color-mix(in srgb, var(--hd-state-wired) 30%, var(--darkglass-surface-inset)); }
+
+/* Checkbox (and, with `switch`, the kit's .toggle switch). */
+.hd-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-3);
+  min-height: var(--darkglass-dimension-row-default);
+  color: var(--darkglass-text-secondary);
+  font-size: var(--darkglass-typography-size-body-sm);
+  cursor: pointer;
+  user-select: none;
+}
+.hd-check__label[hidden] { display: none; }
+.hd-check__box:not(.toggle) {
+  appearance: none;
+  display: inline-grid;
+  place-content: center;
+  flex: none;
+  width: 0.9375rem;
+  height: 0.9375rem;
+  margin: 0;
+  border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-strong);
+  border-radius: var(--darkglass-dimension-radius-sm);
+  background: var(--darkglass-surface-inset);
+  cursor: pointer;
+  transition: background-color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing),
+              border-color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing);
+}
+.hd-check__box:not(.toggle):checked { background: var(--darkglass-action-primary-rest); border-color: var(--darkglass-action-primary-hover); }
+.hd-check__box:not(.toggle):checked::after {
+  content: "\2713";
+  color: var(--darkglass-text-on-fill);
+  font-size: var(--darkglass-typography-size-micro);
+  font-weight: var(--darkglass-typography-weight-bold);
+  line-height: 1;
+}
+.hd-check:hover .hd-check__box, hd-checkbox[data-hd-state~="hover"] .hd-check__box { border-color: var(--darkglass-border-focus); }
+.hd-check:hover, hd-checkbox[data-hd-state~="hover"] .hd-check { color: var(--darkglass-text-primary); }
+/* Pressed reads as pressed -- a primary tint and the focus edge -- not as the faded look of
+   disabled. */
+.hd-check__box:not(:disabled):active, hd-checkbox[data-hd-state~="pressed"] .hd-check__box {
+  background: color-mix(in srgb, var(--darkglass-action-primary-rest) 45%, var(--darkglass-surface-inset));
+  border-color: var(--darkglass-border-focus);
+}
+hd-checkbox[data-hd-state~="pressed"] .hd-check { color: var(--darkglass-text-primary); }
+.hd-check__box:focus-visible, hd-checkbox[data-hd-state~="focus"] .hd-check__box {
+  outline: var(--darkglass-dimension-border-focus) solid var(--darkglass-state-focus-ring);
+  outline-offset: var(--darkglass-dimension-space-1);
+}
+.hd-check__box:disabled, .hd-check__box:disabled + .hd-check__label { opacity: .45; cursor: not-allowed; }
+hd-checkbox[wired] .hd-check__box { border-color: var(--hd-state-wired); }
+hd-checkbox[wired] .hd-check__box:checked { background: var(--hd-state-wired); border-color: var(--hd-state-wired); }
+hd-checkbox[wired] .hd-check { cursor: default; }
+hd-checkbox[invalid] .hd-check__box { border-color: var(--darkglass-border-error); }
+
+/* ---------------------------------------------------------------- the floating layer */
+
+.hd-layer { position: fixed; inset: 0; z-index: 1000; pointer-events: none; }
+.hd-float { position: fixed; z-index: 1000; pointer-events: auto; }
+.hd-menu, .hd-listbox.hd-float, .hd-select__popup, .hd-search, hd-tooltip, hd-confirm, hd-popup,
+.hd-popover, .hd-color__picker, .hd-pie__item {
+  background: var(--darkglass-layer-float-background);
+  border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-layer-float-border);
+  border-radius: var(--darkglass-dimension-radius-md);
+  box-shadow: var(--darkglass-layer-float-shadow);
+  backdrop-filter: var(--darkglass-layer-float-blur);
+  -webkit-backdrop-filter: var(--darkglass-layer-float-blur);
+  color: var(--darkglass-text-secondary);
+  font-size: var(--darkglass-typography-size-body-sm);
+}
+
+/* The dropdown's and the selector's option list. */
+.hd-listbox { display: flex; flex-direction: column; max-height: 18rem; overflow-y: auto; padding: var(--darkglass-dimension-space-2) 0; outline: none; }
+.hd-listbox__group {
+  padding: var(--darkglass-dimension-space-3) var(--darkglass-dimension-space-4) var(--darkglass-dimension-space-2);
+  color: var(--darkglass-text-tertiary);
+  font-size: var(--darkglass-typography-size-micro);
+  letter-spacing: var(--darkglass-typography-tracking-wide);
+  text-transform: uppercase;
+}
+.hd-listbox__opt {
+  display: flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-3);
+  min-height: var(--darkglass-dimension-row-default);
+  padding: 0 var(--darkglass-dimension-space-4);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.hd-listbox__icon { flex: none; width: 1rem; color: var(--darkglass-text-accent); text-align: center; }
+.hd-listbox__text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.hd-listbox__detail { flex: none; color: var(--darkglass-text-tertiary); font-size: var(--darkglass-typography-size-caption); }
+.hd-listbox__opt[aria-selected="true"] { color: var(--darkglass-text-accent); }
+.hd-listbox__opt.is-active { background: var(--darkglass-state-selected); color: var(--darkglass-text-primary); }
+.hd-listbox__opt[aria-disabled="true"] { color: var(--darkglass-text-disabled); cursor: default; }
+.hd-select__popup { display: flex; flex-direction: column; gap: var(--darkglass-dimension-space-2); padding: var(--darkglass-dimension-space-3); }
+.hd-select__popup .hd-listbox { padding: 0; max-height: 16rem; }
+.hd-select__search { width: 100%; }
+.hd-switcher__popup { width: 18rem; }
+mark.hd-hit { background: none; color: var(--darkglass-text-accent); font-weight: var(--darkglass-typography-weight-medium); }
+
+/* ---------------------------------------------------------------- menus (element 7) */
+
+.hd-menu { min-width: 13rem; padding: var(--darkglass-dimension-space-2) 0; outline: none; }
+.hd-menu__item {
+  display: grid;
+  grid-template-columns: 0.875rem 1.125rem minmax(0, 1fr) auto 0.75rem;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-2);
+  min-height: var(--darkglass-dimension-row-default);
+  padding: 0 var(--darkglass-dimension-space-3);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.hd-menu__check { color: var(--darkglass-text-accent); font-size: var(--darkglass-typography-size-caption); }
+.hd-menu__icon { color: var(--darkglass-text-tertiary); text-align: center; }
+.hd-menu__label { overflow: hidden; text-overflow: ellipsis; }
+.hd-menu__key {
+  justify-self: end;
+  padding-left: var(--darkglass-dimension-space-6);
+  color: var(--darkglass-text-tertiary);
+  font: inherit;
+  font-size: var(--darkglass-typography-size-caption);
+}
+.hd-menu__sub { color: var(--darkglass-text-tertiary); font-size: var(--darkglass-typography-size-caption); }
+.hd-menu__item.is-active { background: var(--darkglass-state-selected); color: var(--darkglass-text-primary); }
+.hd-menu__item.is-active .hd-menu__key { color: var(--darkglass-text-secondary); }
+.hd-menu__item[aria-disabled="true"] { color: var(--darkglass-text-disabled); cursor: default; }
+.hd-menu__item[aria-disabled="true"] .hd-menu__key { color: var(--darkglass-text-disabled); }
+.hd-menu__sep { height: var(--darkglass-dimension-border-hairline); margin: var(--darkglass-dimension-space-2) 0; background: var(--darkglass-border-subtle); }
+.hd-menu__heading {
+  padding: var(--darkglass-dimension-space-3) var(--darkglass-dimension-space-4) var(--darkglass-dimension-space-2);
+  color: var(--darkglass-text-tertiary);
+  font-size: var(--darkglass-typography-size-micro);
+  letter-spacing: var(--darkglass-typography-tracking-wide);
+  text-transform: uppercase;
+}
+
+/* Header menus. */
+hd-menubar { gap: 0; }
+.hd-menubar__btn {
+  appearance: none;
+  height: var(--darkglass-dimension-row-compact);
+  padding: 0 var(--darkglass-dimension-space-4);
+  border: var(--darkglass-dimension-border-hairline) solid transparent;
+  border-radius: var(--darkglass-dimension-radius-sm);
+  background: transparent;
+  color: var(--darkglass-text-secondary);
+  font: inherit;
+  font-size: var(--darkglass-typography-size-body-sm);
+  cursor: pointer;
+}
+.hd-menubar__btn:hover, hd-menubar[data-hd-state~="hover"] .hd-menubar__btn:first-of-type { background: var(--darkglass-state-hover); color: var(--darkglass-text-primary); }
+.hd-menubar__btn.is-open, hd-menubar[data-hd-state~="active"] .hd-menubar__btn:first-of-type { background: var(--darkglass-state-selected); color: var(--darkglass-text-primary); }
+.hd-menubar__btn:focus-visible, hd-menubar[data-hd-state~="focus"] .hd-menubar__btn:first-of-type {
+  outline: var(--darkglass-dimension-border-focus) solid var(--darkglass-state-focus-ring);
+  outline-offset: calc(-1 * var(--darkglass-dimension-border-focus));
+}
+
+/* The search menu (F3). */
+.hd-search { width: 30rem; padding: var(--darkglass-dimension-space-3); display: flex; flex-direction: column; gap: var(--darkglass-dimension-space-2); }
+.hd-search__input { width: 100%; }
+.hd-search__list { max-height: 20rem; overflow-y: auto; }
+.hd-search__row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  min-height: var(--darkglass-dimension-row-default);
+  padding: 0 var(--darkglass-dimension-space-3);
+  border-radius: var(--darkglass-dimension-radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.hd-search__path { color: var(--darkglass-text-tertiary); }
+.hd-search__label { overflow: hidden; text-overflow: ellipsis; color: var(--darkglass-text-primary); }
+.hd-search__row.is-active { background: var(--darkglass-state-selected); }
+.hd-search__row[aria-disabled="true"] .hd-search__label { color: var(--darkglass-text-disabled); }
+.hd-search__empty { padding: var(--darkglass-dimension-space-4); color: var(--darkglass-text-tertiary); font-size: var(--darkglass-typography-size-caption); }
+
+/* The pie: items around a centre, Blender's order. Only the items take the pointer, so a
+   press anywhere else is outside the pie and closes it. */
+.hd-pie { width: 26rem; height: 17rem; pointer-events: none; outline: none; }
+/* The centre is a disc on the float material: it sits over whatever opened the pie (a
+   label, a node) so nothing is drawn through it, and the direction shows as a tick on its
+   rim rather than a line from the middle. */
+.hd-pie__center {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 2.5rem;
+  height: 2.5rem;
+  margin: -1.25rem 0 0 -1.25rem;
+  border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-layer-float-border);
+  border-radius: 50%;
+  background: var(--darkglass-layer-float-background);
+  box-shadow: var(--darkglass-layer-float-shadow);
+  backdrop-filter: var(--darkglass-layer-float-blur);
+  -webkit-backdrop-filter: var(--darkglass-layer-float-blur);
+}
+.hd-pie__center::after {
+  content: "";
+  position: absolute;
+  inset: 0.8125rem;
+  border: var(--darkglass-dimension-border-focus) solid var(--darkglass-border-strong);
+  border-radius: 50%;
+}
+.hd-pie__pointer {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 0.625rem;
+  height: var(--darkglass-dimension-border-focus);
+  margin-top: calc(var(--darkglass-dimension-border-focus) / -2);
+  transform-origin: 0 50%;
+  transform: rotate(var(--angle, 0rad)) translateX(0.5rem);
+  border-radius: var(--darkglass-dimension-radius-pill);
+  background: var(--darkglass-border-focus);
+}
+.hd-pie__item {
+  position: absolute;
+  left: calc(50% + var(--x));
+  top: calc(50% + var(--y));
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-3);
+  height: var(--darkglass-dimension-row-default);
+  padding: 0 var(--darkglass-dimension-space-5);
+  border-radius: var(--darkglass-dimension-radius-pill);
+  color: var(--darkglass-text-primary);
+  font: inherit;
+  font-size: var(--darkglass-typography-size-body-sm);
+  white-space: nowrap;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.hd-pie__item.is-active { background: var(--darkglass-state-selected); border-color: var(--darkglass-border-focus); }
+.hd-pie__item:disabled { color: var(--darkglass-text-disabled); cursor: default; }
+
+/* ---------------------------------------------------------------- tooltips (element 8) */
+
+hd-tooltip {
+  display: block;
+  max-width: 24rem;
+  padding: var(--darkglass-dimension-space-3) var(--darkglass-dimension-space-4);
+  font-size: var(--darkglass-typography-size-caption);
+  line-height: var(--darkglass-typography-line-height-normal);
+  pointer-events: none;
+}
+.hd-tip__head { display: flex; align-items: baseline; justify-content: space-between; gap: var(--darkglass-dimension-space-6); }
+.hd-tip__title { color: var(--darkglass-text-primary); font-weight: var(--darkglass-typography-weight-medium); font-size: var(--darkglass-typography-size-body-sm); }
+.hd-tip__key { color: var(--darkglass-text-tertiary); font: inherit; white-space: nowrap; }
+.hd-tip__desc { margin-top: var(--darkglass-dimension-space-2); color: var(--darkglass-text-secondary); }
+.hd-tip__disabled { margin-top: var(--darkglass-dimension-space-2); color: var(--darkglass-text-warning); }
+.hd-tip__dev { margin-top: var(--darkglass-dimension-space-2); color: var(--darkglass-text-accent); font-family: var(--darkglass-typography-family-mono); }
+
+/* ---------------------------------------------------------------- feedback (element 9) */
+
+hd-report {
+  display: flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-3);
+  min-height: var(--darkglass-dimension-row-default);
+  padding: 0 var(--darkglass-dimension-space-2) 0 var(--darkglass-dimension-space-4);
+  border: var(--darkglass-dimension-border-hairline) solid var(--hd-report-tone, var(--darkglass-text-accent));
+  border-radius: var(--darkglass-dimension-radius-sm);
+  background: color-mix(in srgb, var(--hd-report-tone, var(--darkglass-text-accent)) 10%, transparent);
+  color: var(--hd-report-tone, var(--darkglass-text-accent));
+  font-size: var(--darkglass-typography-size-body-sm);
+}
+hd-report[hidden] { display: none; }
+hd-report[data-severity="success"] { --hd-report-tone: var(--darkglass-text-success); }
+hd-report[data-severity="warning"] { --hd-report-tone: var(--darkglass-text-warning); }
+hd-report[data-severity="error"] { --hd-report-tone: var(--darkglass-text-error); }
+.hd-report__icon {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: var(--hd-report-tone, var(--darkglass-text-accent));
+  color: var(--darkglass-surface-sunken);
+  font-size: var(--darkglass-typography-size-micro);
+  font-weight: var(--darkglass-typography-weight-bold);
+}
+.hd-report__text { flex: 1 1 auto; min-width: 0; color: var(--darkglass-text-primary); overflow-wrap: anywhere; }
+.hd-report__close[hidden] { display: none; }
+/* A notice at a control -- a refused paste (core/notice.ts): a warning report floated
+   under the control, on the float background so the page does not show through. */
+.hd-notice {
+  max-width: 24rem;
+  border-radius: var(--darkglass-dimension-radius-sm);
+  background: var(--darkglass-layer-float-background);
+  box-shadow: var(--darkglass-layer-float-shadow);
+  pointer-events: none;
+}
+.hd-notice hd-report { padding-block: var(--darkglass-dimension-space-2); }
+
+hd-progress { display: flex; align-items: center; gap: var(--darkglass-dimension-space-3); min-width: 10rem; }
+.hd-progress__bar {
+  position: relative;
+  flex: 1 1 auto;
+  height: var(--darkglass-dimension-space-3);
+  border-radius: var(--darkglass-dimension-radius-pill);
+  background: var(--darkglass-meter-track);
+  overflow: hidden;
+}
+.hd-progress__fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--darkglass-meter-from), var(--darkglass-meter-to));
+  transition: width var(--darkglass-transition-layout-duration) var(--darkglass-transition-layout-easing);
+}
+hd-progress[data-indeterminate] .hd-progress__fill { width: 35%; animation: hd-indeterminate var(--darkglass-motion-duration-deliberate) var(--darkglass-transition-state-easing) infinite alternate; }
+@keyframes hd-indeterminate {
+  from { transform: translateX(-10%); }
+  to { transform: translateX(200%); }
+}
+.hd-progress__text { flex: none; color: var(--darkglass-text-tertiary); font-size: var(--darkglass-typography-size-caption); font-variant-numeric: tabular-nums; }
+.hd-progress__cancel[hidden] { display: none; }
+
+hd-status-hints { gap: var(--darkglass-dimension-space-5); flex-wrap: wrap; font-size: var(--darkglass-typography-size-caption); }
+.hd-hint { display: inline-flex; align-items: center; gap: var(--darkglass-dimension-space-2); }
+.hd-hint__key {
+  padding: 0 var(--darkglass-dimension-space-2);
+  border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-strong);
+  border-radius: var(--darkglass-dimension-radius-sm);
+  color: var(--darkglass-text-secondary);
+  font: inherit;
+  line-height: 1.4;
+}
+.hd-hint__label { color: var(--darkglass-text-tertiary); }
+
+hd-modal-header {
+  display: flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-4);
+  min-height: var(--darkglass-density-area-default);
+  padding: 0 var(--darkglass-dimension-space-5);
+  border-left: var(--darkglass-dimension-border-focus) solid var(--darkglass-border-focus);
+  background: var(--darkglass-state-selected);
+  color: var(--darkglass-text-primary);
+  font-size: var(--darkglass-typography-size-body-sm);
+  font-variant-numeric: tabular-nums;
+}
+.hd-modal__op { font-weight: var(--darkglass-typography-weight-medium); color: var(--darkglass-text-accent); }
+.hd-modal__sep { color: var(--darkglass-text-tertiary); }
+
+/* ---------------------------------------------------------------- dialogs (element 10) */
+
+hd-confirm { display: block; min-width: 17rem; max-width: 26rem; padding: var(--darkglass-dimension-space-5); }
+.hd-confirm__title { color: var(--darkglass-text-primary); font-weight: var(--darkglass-typography-weight-medium); font-size: var(--darkglass-typography-size-body); }
+.hd-confirm__msg { margin-top: var(--darkglass-dimension-space-3); color: var(--darkglass-text-secondary); overflow-wrap: anywhere; }
+.hd-confirm__actions { display: flex; gap: var(--darkglass-dimension-space-3); margin-top: var(--darkglass-dimension-space-5); }
+.hd-confirm__ok { min-width: 6rem; }
+
+hd-popup, .hd-popover { display: block; min-width: 16rem; max-width: 30rem; }
+.hd-popup__head {
+  padding: var(--darkglass-dimension-space-3) var(--darkglass-dimension-space-5);
+  border-bottom: var(--darkglass-dimension-border-hairline) solid var(--darkglass-layer-float-border);
+  color: var(--darkglass-text-secondary);
+  font-size: var(--darkglass-type-panel-header-size);
+  font-weight: var(--darkglass-type-panel-header-weight);
+  letter-spacing: var(--darkglass-type-panel-header-tracking);
+  text-transform: uppercase;
+}
+.hd-popup__head[hidden] { display: none; }
+.hd-popup__body { display: flex; flex-direction: column; gap: var(--darkglass-dimension-space-3); padding: var(--darkglass-dimension-space-5); }
+
+/* Drag and drop: where a drag in flight could land. */
+[data-hd-drop-state="ready"] { outline: var(--darkglass-dimension-border-hairline) dashed var(--darkglass-border-focus); outline-offset: var(--darkglass-dimension-space-1); }
+[data-hd-drop-state="over"] {
+  outline: var(--darkglass-dimension-border-focus) solid var(--darkglass-border-focus);
+  outline-offset: var(--darkglass-dimension-space-1);
+  background-color: color-mix(in srgb, var(--darkglass-state-selected) 70%, transparent);
+}
+[data-hd-drop-state="reject"] { outline: var(--darkglass-dimension-border-hairline) dashed var(--darkglass-border-error); outline-offset: var(--darkglass-dimension-space-1); cursor: no-drop; }
+[data-hd-drag] { cursor: grab; }
+[data-hd-drag][data-hd-dragging] { opacity: .5; }
+
+/* ---------------------------------------------------------------- collections (element 5) */
+
+.hd-list__title { display: block; margin-bottom: var(--darkglass-dimension-space-2); }
+.hd-list__body { display: flex; gap: var(--darkglass-dimension-space-2); align-items: flex-start; }
+.hd-list__main { flex: 1 1 auto; min-width: 0; }
+.hd-list__rows, .hd-tree {
+  position: relative;
+  min-height: calc(var(--darkglass-dimension-row-compact) * 3 + var(--darkglass-dimension-space-4));
+  max-height: 18rem;
+  overflow-y: auto;
+  padding: var(--darkglass-dimension-space-2) 0;
+  background: var(--darkglass-surface-inset);
+  border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle);
+  border-radius: var(--darkglass-dimension-radius-sm);
+  outline: none;
+}
+.hd-list__rows[hidden] { display: none; }
+.hd-list__rows:focus-visible, .hd-tree:focus-visible, .hd-grid:focus-visible,
+:is(hd-list, hd-tree, hd-asset-grid)[data-hd-state~="focus"] :is(.hd-list__rows, .hd-tree, .hd-grid) {
+  outline: var(--darkglass-dimension-border-focus) solid var(--darkglass-state-focus-ring);
+  outline-offset: var(--darkglass-dimension-space-1);
+}
+.hd-list__row, .hd-tree__row {
+  display: flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-3);
+  min-height: var(--darkglass-dimension-row-compact);
+  padding: 0 var(--darkglass-dimension-space-3);
+  color: var(--darkglass-text-secondary);
+  font-size: var(--darkglass-typography-size-body-sm);
+  cursor: default;
+  white-space: nowrap;
+}
+.hd-list__row:hover, .hd-tree__row:hover,
+:is(hd-list, hd-tree)[data-hd-state~="hover"] :is(.hd-list__row, .hd-tree__row):nth-child(2) { background: var(--darkglass-state-hover); }
+:is(hd-list, hd-tree)[data-hd-state~="pressed"] :is(.hd-list__row, .hd-tree__row):nth-child(2) { background: var(--darkglass-state-active); }
+.hd-list__row[aria-selected="true"], .hd-tree__row[aria-selected="true"] { background: var(--darkglass-state-selected); color: var(--darkglass-text-primary); }
+.hd-list__row[aria-disabled="true"], .hd-tree__row[aria-disabled="true"] { color: var(--darkglass-text-disabled); }
+.hd-list__icon, .hd-tree__icon { flex: none; width: 1rem; text-align: center; color: var(--darkglass-text-tertiary); }
+.hd-list__label, .hd-tree__label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.hd-list__detail { flex: none; margin-left: auto; color: var(--darkglass-text-tertiary); font-size: var(--darkglass-typography-size-caption); }
+.hd-list__grip, .hd-panel__grip { flex: none; color: var(--darkglass-text-tertiary); cursor: grab; letter-spacing: -0.1em; user-select: none; }
+.hd-list__grip[data-disabled] { opacity: .3; cursor: not-allowed; }
+.hd-list__row[data-hd-dragging] { opacity: .5; }
+.hd-list__drop { position: absolute; left: 0; right: 0; height: var(--darkglass-dimension-border-focus); background: var(--darkglass-border-focus); pointer-events: none; }
+.hd-list__rename { flex: 1 1 auto; }
+.hd-list__side { display: flex; flex-direction: column; gap: var(--darkglass-dimension-space-2); }
+.hd-list__side:empty { display: none; }
+.hd-list__side .btn.icon { width: var(--darkglass-dimension-row-default); height: var(--darkglass-dimension-row-default); }
+.hd-list__empty[hidden] { display: none; }
+.hd-list__empty { background: var(--darkglass-surface-inset); border: var(--darkglass-dimension-border-hairline) dashed var(--darkglass-border-subtle); border-radius: var(--darkglass-dimension-radius-sm); }
+.hd-list__filtertoggle {
+  appearance: none;
+  margin-top: var(--darkglass-dimension-space-2);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--darkglass-text-tertiary);
+  font: inherit;
+  font-size: var(--darkglass-typography-size-caption);
+  cursor: pointer;
+}
+.hd-list__filtertoggle:hover { color: var(--darkglass-text-primary); }
+.hd-list__filtertoggle:focus-visible { outline: var(--darkglass-dimension-border-focus) solid var(--darkglass-state-focus-ring); outline-offset: var(--darkglass-dimension-space-1); }
+.hd-list__filter { display: flex; align-items: center; gap: var(--darkglass-dimension-space-2); margin-top: var(--darkglass-dimension-space-2); }
+.hd-list__filter[hidden] { display: none; }
+.hd-list__filter > hd-text { flex: 1 1 auto; }
+:is(hd-list, hd-tree, hd-asset-grid)[disabled] { opacity: .45; pointer-events: none; }
+:is(hd-list, hd-tree, hd-asset-grid)[loading] :is(.hd-list__rows, .hd-tree, .hd-grid) { position: relative; overflow: hidden; }
+:is(hd-list, hd-tree, hd-asset-grid)[loading] :is(.hd-list__rows, .hd-tree, .hd-grid) > * { visibility: hidden; }
+:is(hd-list, hd-tree, hd-asset-grid)[loading] :is(.hd-list__rows, .hd-tree, .hd-grid)::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--darkglass-state-active), transparent);
+  animation: k-shimmer var(--darkglass-motion-duration-deliberate) var(--darkglass-transition-state-easing) infinite;
+}
+
+.hd-tree__row { padding-left: calc(var(--darkglass-dimension-space-3) + var(--hd-depth, 0) * 1rem); }
+.hd-tree__twisty { flex: none; width: 1rem; text-align: center; color: var(--darkglass-text-tertiary); cursor: pointer; }
+.hd-tree__twisty:hover { color: var(--darkglass-text-primary); }
+hd-tree > hd-text { margin-bottom: var(--darkglass-dimension-space-2); }
+
+.hd-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5.5rem, 1fr));
+  gap: var(--darkglass-dimension-space-3);
+  padding: var(--darkglass-dimension-space-3);
+  background: var(--darkglass-surface-inset);
+  border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle);
+  border-radius: var(--darkglass-dimension-radius-sm);
+  outline: none;
+}
+.hd-grid__tile {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: var(--darkglass-dimension-space-2);
+  padding: var(--darkglass-dimension-space-2);
+  border: var(--darkglass-dimension-border-hairline) solid transparent;
+  border-radius: var(--darkglass-dimension-radius-sm);
+  cursor: pointer;
+}
+.hd-grid__thumb {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  border-radius: var(--darkglass-dimension-radius-sm);
+  background: var(--darkglass-surface-elevated);
+  color: var(--darkglass-text-secondary);
+  font-size: var(--darkglass-typography-size-title);
+}
+.hd-grid__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; color: var(--darkglass-text-secondary); font-size: var(--darkglass-typography-size-caption); }
+.hd-grid__tile:hover, hd-asset-grid[data-hd-state~="hover"] .hd-grid__tile:nth-child(2) { background: var(--darkglass-state-hover); }
+hd-asset-grid[data-hd-state~="pressed"] .hd-grid__tile:nth-child(2) { background: var(--darkglass-state-active); }
+.hd-grid__tile[aria-selected="true"] { background: var(--darkglass-state-selected); border-color: var(--darkglass-border-focus); }
+.hd-grid__tile[aria-selected="true"] .hd-grid__name { color: var(--darkglass-text-primary); }
+.hd-grid__tile[aria-disabled="true"] { opacity: .45; cursor: default; }
+
+/* The growing list: entries, then one dimmed ghost field that becomes the next entry. */
+hd-growing-list > .hd-field__label { display: block; margin-bottom: var(--darkglass-dimension-space-2); }
+.hd-grow { display: flex; flex-direction: column; gap: var(--darkglass-dimension-space-2); }
+.hd-grow__input { width: 100%; }
+.hd-grow__input.is-ghost { opacity: .5; border-style: dashed; }
+.hd-grow__input.is-ghost:focus, .hd-grow__input.is-ghost:hover { opacity: 1; }
+.hd-grow__wired {
+  display: flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-3);
+  min-height: var(--darkglass-dimension-row-default);
+  padding: 0 var(--darkglass-dimension-space-3);
+  border: var(--darkglass-dimension-border-hairline) solid var(--hd-state-wired);
+  border-radius: var(--darkglass-dimension-radius-sm);
+  background: color-mix(in srgb, var(--hd-state-wired) 16%, var(--darkglass-surface-inset));
+  color: var(--darkglass-text-primary);
+  font-size: var(--darkglass-typography-size-body-sm);
+}
+.hd-grow__link { color: var(--hd-state-wired); font-size: var(--darkglass-typography-size-caption); }
+hd-growing-list[invalid] .hd-grow__input:not(.is-ghost) { border-color: var(--darkglass-border-error); }
+
+/* ---------------------------------------------------------------- containers (element 6) */
+
+/* The collapsible panel is a .k-panel with a triangle. */
+hd-panel.k-panel { display: flex; }
+.hd-panel__header { cursor: pointer; user-select: none; }
+.hd-panel__header:hover, hd-panel[data-hd-state~="hover"] > .hd-panel__header { background: var(--darkglass-state-hover); }
+hd-panel[data-hd-state~="pressed"] > .hd-panel__header { background: var(--darkglass-state-active); }
+.hd-panel__toggle {
+  appearance: none;
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-3);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.hd-panel__toggle:focus-visible, hd-panel[data-hd-state~="focus"] > .hd-panel__header .hd-panel__toggle {
+  outline: var(--darkglass-dimension-border-focus) solid var(--darkglass-state-focus-ring);
+  outline-offset: var(--darkglass-dimension-space-1);
+  border-radius: var(--darkglass-dimension-radius-sm);
+}
+.hd-panel__twisty { flex: none; width: 0.75rem; color: var(--darkglass-text-tertiary); font-size: var(--darkglass-typography-size-caption); }
+.hd-panel__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--darkglass-text-secondary);
+  font-size: var(--darkglass-type-panel-header-size);
+  font-weight: var(--darkglass-type-panel-header-weight);
+  letter-spacing: var(--darkglass-type-panel-header-tracking);
+  text-transform: uppercase;
+}
+hd-panel[collapsed] > .k-panel__header { border-bottom-color: transparent; }
+.hd-panel__body[hidden] { display: none; }
+.hd-panel__pin { font-size: var(--darkglass-typography-size-caption); opacity: .55; }
+.hd-panel__pin[aria-pressed="true"], hd-panel[pinned] .hd-panel__pin { opacity: 1; color: var(--darkglass-text-accent); border-color: var(--darkglass-border-focus); }
+hd-panel[pinned] > .hd-panel__header, hd-panel[data-hd-state~="active"] > .hd-panel__header { box-shadow: inset var(--darkglass-dimension-border-focus) 0 0 var(--darkglass-border-focus); }
+hd-panel[data-hd-dragging] { opacity: .6; }
+.hd-panel__drop { height: var(--darkglass-dimension-border-focus); background: var(--darkglass-border-focus); border-radius: var(--darkglass-dimension-radius-pill); }
+hd-panel[disabled] { opacity: .45; }
+hd-panel[disabled] > .hd-panel__header { cursor: not-allowed; }
+hd-panel[loading] > .hd-panel__body { position: relative; overflow: hidden; }
+hd-panel[loading] > .hd-panel__body > * { visibility: hidden; }
+hd-panel[loading] > .hd-panel__body::after {
+  content: "";
+  position: absolute;
+  inset: var(--darkglass-dimension-space-5);
+  border-radius: var(--darkglass-dimension-radius-sm);
+  background: linear-gradient(90deg, var(--darkglass-surface-base), var(--darkglass-state-active), var(--darkglass-surface-base));
+  animation: k-shimmer var(--darkglass-motion-duration-deliberate) var(--darkglass-transition-state-easing) infinite;
+}
+/* A sub-panel sits inside its parent's body: no glass of its own, a lighter edge. */
+hd-panel[sub] { background: transparent; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; border-color: var(--darkglass-border-subtle); }
+hd-panel[sub]::before { display: none; }
+
+/* The N-panel: panels, with the vertical tab strip at the region's edge. */
+hd-sidebar { display: flex; min-height: 10rem; border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle); border-radius: var(--darkglass-dimension-radius-sm); background: var(--darkglass-surface-base); }
+.hd-sidebar__content { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: var(--darkglass-dimension-space-3); padding: var(--darkglass-dimension-space-3); }
+hd-sidebar > hd-tabs { flex: none; border-left: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle); }
+
+/* Tabs: workspace tabs along the top, or the sidebar's vertical strip. */
+.hd-tabs__strip { display: flex; gap: var(--darkglass-dimension-space-1); overflow-x: auto; scrollbar-width: none; }
+.hd-tab {
+  appearance: none;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-2);
+  height: var(--darkglass-dimension-row-default);
+  padding: 0 var(--darkglass-dimension-space-5);
+  border: var(--darkglass-dimension-border-hairline) solid transparent;
+  border-bottom: 0;
+  border-radius: var(--darkglass-dimension-radius-sm) var(--darkglass-dimension-radius-sm) 0 0;
+  background: transparent;
+  color: var(--darkglass-text-tertiary);
+  font: inherit;
+  font-size: var(--darkglass-typography-size-body-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.hd-tab:hover, hd-tabs[data-hd-state~="hover"] .hd-tab:nth-child(2) { background: var(--darkglass-state-hover); color: var(--darkglass-text-secondary); }
+hd-tabs[data-hd-state~="pressed"] .hd-tab:nth-child(2) { background: var(--darkglass-state-active); }
+.hd-tab[aria-selected="true"] {
+  background: var(--darkglass-surface-base);
+  border-color: var(--darkglass-border-subtle);
+  color: var(--darkglass-text-primary);
+  box-shadow: inset 0 var(--darkglass-dimension-border-focus) 0 var(--darkglass-border-focus);
+}
+.hd-tab:focus-visible, hd-tabs[data-hd-state~="focus"] .hd-tab[aria-selected="true"] {
+  outline: var(--darkglass-dimension-border-focus) solid var(--darkglass-state-focus-ring);
+  outline-offset: calc(-1 * var(--darkglass-dimension-border-focus));
+}
+.hd-tab:disabled { color: var(--darkglass-text-disabled); cursor: not-allowed; }
+.hd-tab__rename { width: 8rem; height: 100%; padding: 0 var(--darkglass-dimension-space-2); }
+hd-tabs.is-vertical .hd-tabs__strip { flex-direction: column; overflow-x: visible; overflow-y: auto; }
+hd-tabs.is-vertical .hd-tab {
+  writing-mode: vertical-rl;
+  height: auto;
+  padding: var(--darkglass-dimension-space-5) 0;
+  width: var(--darkglass-dimension-row-default);
+  border: var(--darkglass-dimension-border-hairline) solid transparent;
+  border-left: 0;
+  border-radius: 0 var(--darkglass-dimension-radius-sm) var(--darkglass-dimension-radius-sm) 0;
+  justify-content: center;
+}
+hd-tabs.is-vertical .hd-tab[aria-selected="true"] { box-shadow: inset var(--darkglass-dimension-border-focus) 0 0 var(--darkglass-border-focus); }
+
+/* The property column (F-MOD-01): label | value, in a column capped at a readable width.
+   `columns` flows it into several columns at once, top to bottom, as Blender's regions do. */
+hd-props { max-width: 30rem; }
+hd-props[data-columns="2"] { columns: 2; max-width: 62rem; }
+hd-props[data-columns="3"] { columns: 3; max-width: 94rem; }
+hd-props[data-columns="auto"] { column-width: 24rem; max-width: none; }
+hd-props[data-columns] { column-gap: var(--darkglass-dimension-space-8); }
+hd-props > * { break-inside: avoid; margin-bottom: var(--darkglass-dimension-space-2); }
+hd-props > :is(hd-number, hd-text, hd-enum, hd-select, hd-color, hd-path, hd-hotkey, hd-growing-list),
+hd-props .k-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 3fr);
+  /* Baseline, not centre: a value that wraps to two lines keeps its label on its first. */
+  align-items: baseline;
+  gap: var(--darkglass-dimension-space-4);
+}
+hd-props > * > .hd-field__label, hd-props > hd-path .hd-field__label { display: block; text-align: right; }
+hd-props :is(.hd-num__label, .hd-txt__label, .hd-choice__label) { display: none; }
+hd-props > hd-path .hd-txt__label { display: none; }
+hd-props > hd-growing-list > .hd-field__label { align-self: start; padding-top: var(--darkglass-dimension-space-2); margin: 0; }
+hd-props > :is(hd-checkbox, hd-radio-row) { display: flex; margin-left: calc(40% + var(--darkglass-dimension-space-3)); }
+hd-props .k-row { min-height: var(--darkglass-dimension-row-default); padding: 0; }
+hd-props .k-row__label { flex: none; text-align: right; color: var(--darkglass-text-tertiary); font-size: var(--darkglass-typography-size-caption); }
+hd-props .k-row__value { flex: none; min-width: 0; overflow-wrap: anywhere; font-size: var(--darkglass-typography-size-body-sm); }
+hd-props .k-row:hover { background: transparent; }
+
+/* ---------------------------------------------------------------- area chrome (element 11) */
+
+hd-area-header {
+  display: flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-2);
+  min-height: var(--darkglass-density-area-default);
+  padding: 0 var(--darkglass-dimension-space-2);
+  border-bottom: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle);
+  background: var(--darkglass-surface-base);
+}
+.hd-area-header__spacer { flex: 1 1 auto; }
+.hd-switcher {
+  appearance: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-2);
+  height: var(--darkglass-dimension-row-compact);
+  padding: 0 var(--darkglass-dimension-space-2);
+  border: var(--darkglass-dimension-border-hairline) solid transparent;
+  border-radius: var(--darkglass-dimension-radius-sm);
+  background: transparent;
+  color: var(--darkglass-text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+.hd-switcher:hover, hd-view-switcher[data-hd-state~="hover"] .hd-switcher { background: var(--darkglass-state-hover); border-color: var(--darkglass-border-subtle); }
+.hd-switcher:active, hd-view-switcher[data-hd-state~="pressed"] .hd-switcher, .hd-switcher[aria-expanded="true"] { background: var(--darkglass-state-active); border-color: var(--darkglass-border-focus); }
+.hd-switcher:focus-visible, hd-view-switcher[data-hd-state~="focus"] .hd-switcher {
+  outline: var(--darkglass-dimension-border-focus) solid var(--darkglass-state-focus-ring);
+  outline-offset: var(--darkglass-dimension-space-1);
+}
+.hd-switcher:disabled { opacity: .45; cursor: not-allowed; }
+.hd-switcher__glyph {
+  display: inline-grid;
+  place-items: center;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: var(--darkglass-dimension-radius-sm);
+  background: var(--darkglass-surface-elevated);
+  color: var(--darkglass-text-accent);
+  font-size: var(--darkglass-typography-size-caption);
+  font-weight: var(--darkglass-typography-weight-medium);
+}
+.hd-region-toggle { font-size: var(--darkglass-typography-size-body-lg); }
+.hd-region-toggle[aria-pressed="true"] { color: var(--darkglass-text-accent); }
+hd-region-toggle[data-hd-state~="hover"] .btn { background: var(--darkglass-state-hover); }
+hd-region-toggle[data-hd-state~="focus"] .btn { outline: var(--darkglass-dimension-border-focus) solid var(--darkglass-state-focus-ring); outline-offset: var(--darkglass-dimension-space-1); }
+
+/* ---------------------------------------------------------------- canvas vocabulary (element 12) */
+
+hd-socket { gap: var(--darkglass-dimension-space-2); color: var(--darkglass-text-secondary); font-size: var(--darkglass-typography-size-caption); }
+.hd-socket__glyph { flex: none; overflow: visible; }
+.hd-socket__shape { fill: var(--hd-socket-color, var(--hd-socket-unknown)); stroke: var(--hd-node-border); stroke-width: 1; }
+.hd-socket__shape[data-hollow] { fill: none; stroke: var(--hd-socket-color, var(--hd-socket-unknown)); stroke-width: 2; }
+.hd-socket__dot { fill: var(--hd-node-body); }
+hd-socket[linked] .hd-socket__shape { stroke: var(--darkglass-text-primary); }
+.hd-socket__label[hidden] { display: none; }
+
+/* ---------------------------------------------------------------- key capture */
+
+.hd-hotkey__key { color: var(--darkglass-text-primary); font-family: var(--darkglass-typography-family-mono); font-size: var(--darkglass-type-code-size); }
+hd-hotkey[data-editing] .hd-hotkey__key { color: var(--darkglass-text-accent); font-family: var(--darkglass-typography-family-sans); }

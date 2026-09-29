@@ -1,0 +1,38 @@
+{
+  "comment": "Files this module carries verbatim from the HollowDeck checkout. It imports nothing from HollowDeck (interop contract, section 10), so it copies them, byte for byte. Never edit a copy: re-vendor from upstream and update the hash. tests/test_hollowdeck_module.py checks every hash, and compares against a live checkout when HDECK_CHECKOUT points at one.",
+  "upstream_synced": "2026-09-29 (INTEROP.md last synced through P103)",
+  "files": {
+    "vendor/guard.py": {
+      "upstream": "shared/python/guard.py",
+      "sha256": "329a01a67adf9357f2abd7626bea1a4b5343607ad4df78c597662bcccc644a6c"
+    },
+    "vendor/assets.py": {
+      "upstream": "shared/python/assets.py",
+      "sha256": "182eb00e757c7a17b57f9346c7b0125b1fbafbbd2a0ca20a0373f638dca7ad21"
+    },
+    "vendor/proc.py": {
+      "upstream": "shared/python/proc.py",
+      "sha256": "16ca684cbead197e169b623d9ec6cb7677fdbc732d5da2c1064118e6705097a5"
+    },
+    "static/vendor/darkglass.css": {
+      "upstream": "docs/ui-demos/assets/darkglass.css",
+      "sha256": "1122c0fefe90ace5464336ee418b97841f8bf3d045c4cee21ecffb3019438e87"
+    },
+    "static/vendor/panel.css": {
+      "upstream": "docs/ui-demos/assets/panel.css",
+      "sha256": "8b08aebef62ec4bebd63d7717932115702ccea2f482a1e93b9332977bacabb6f"
+    },
+    "static/vendor/module.css": {
+      "upstream": "docs/ui-demos/assets/module.css",
+      "sha256": "47888ae24e70df5ea61039ad9c34da6d064355c94c103c85c12766ca69c09bfe"
+    },
+    "static/vendor/module.js": {
+      "upstream": "docs/ui-demos/assets/module.js",
+      "sha256": "29403b6d8e378804c2898e1ce3f918612acc86f6b4e321a91e0e10f6b4d0b89d"
+    },
+    "static/vendor/kit.js": {
+      "upstream": "docs/ui-demos/assets/kit.js",
+      "sha256": "094303b6b744db30c0f22de4cb3eb4280a116f9f3431640cf220a96a2e73e4fa"
+    }
+  }
+}

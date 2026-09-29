@@ -1,0 +1,26 @@
+# Stage 4b: LLM-as-judge over a run's generations (scripts/judge.py).
+# Grades what evaluate.py generated (runs/<run>/eval/generations.jsonl) with
+# Claude or a local Ollama model, against the rubric below.
+#
+# Claude needs the SDK (pip install -e ".[judge]") and credentials the SDK can
+# find: ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, or an `ant auth login` profile.
+run_name: null
+input: runs/${run_name}/eval/generations.jsonl   # --input wins
+out_dir: runs/${run_name}/eval                    # judgements.jsonl + judge_results.json
+
+provider: anthropic       # anthropic | ollama
+model: null               # null -> claude-opus-5-5 (anthropic) / qwen3:1.7b (ollama)
+effort: medium            # anthropic output_config effort; null for a model without effort
+fallbacks: true           # anthropic: re-run a classifier-declined request on the
+                          # recommended fallback model (server-side, "default" mode)
+ollama_url: http://127.0.0.1:11434
+
+max_items: 100            # judge at most this many generations (cost control)
+max_score: 10
+pass_threshold: 7         # a score at or above this counts as a pass; null = no pass rate
+
+rubric: |
+  Judge whether the response answers the task correctly, completely and
+  coherently. Reward responses that are factually right, on topic and fluent.
+  Penalise responses that are wrong, off topic, repetitive, truncated, or that
+  contradict the reference answer when one is given.
