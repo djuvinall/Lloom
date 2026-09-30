@@ -2,7 +2,7 @@
   "id": "lloom",
   "name": "Lloom",
   "version": "0.1.0",
-  "description": "Train, finetune, evaluate and judge language models with Lloom from HollowDeck. Every tool runs one of the Lloom workspace's own stage scripts as a background job, so a graph can start a pipeline, wait on it, read its metrics, generate from the checkpoint it produced, and have Claude or a local model grade the result. Publishes the workspace's recipes, presets, stage scripts, runs and checkpoints to the Asset Library. The judge tool reaches the Claude API when its provider is anthropic; HollowDeck's Network switch does not govern that traffic.",
+  "description": "Train, finetune, evaluate and judge language models with Lloom from HollowDeck. Every tool runs one of the Lloom workspace's own stage scripts as a background job, so a graph can start a pipeline, wait on it, read its metrics, generate from the checkpoint it produced, and have a model grade the result. Lloom calls no model provider itself: judging is a request Lloom writes and HollowDeck's own model nodes carry out, with whichever model you pick. Publishes the workspace's recipes, presets, stage scripts, runs and checkpoints to the Asset Library.",
   "kind": "process",
   "command": ["{python}", "__main__.py"],
   "verify": ["{python}", "selfcheck.py"],
@@ -51,7 +51,7 @@
         {"name": "until", "type": "str", "label": "Until stage", "description": "stop after this stage", "widget": "string", "default": "", "required": false},
         {"name": "dry_run", "type": "bool", "label": "Dry run", "description": "print the stage commands without running them", "widget": "bool", "default": false, "required": false},
         {"name": "wait_seconds", "type": "int", "label": "Wait (s)", "description": "wait up to this long for the job to finish before answering; 0 answers at once. At most 280", "widget": "int", "default": 0, "min": 0, "max": 280, "step": 10, "required": false},
-        {"name": "on_complete_graph", "type": "str", "label": "Then run graph", "description": "a saved graph (slug) the HollowDeck core runs, unattended, when this job finishes. Empty for none", "widget": "string", "default": "", "required": false}
+        {"name": "on_complete_graph", "type": "str", "label": "Then run graph", "description": "a saved graph (slug) the HollowDeck core runs, unattended, when this job succeeds (not when it fails or is cancelled). Empty for none", "widget": "string", "default": "", "required": false}
       ],
       "outputs": [
         {"name": "job_id", "type": "str", "description": "the job's id, for Lloom Job Status and Cancel"},
@@ -67,14 +67,14 @@
         "what": "Starts a Lloom pipeline recipe as a background job.",
         "how": "Runs scripts/run_pipeline.py in the workspace under the configured interpreter, with --pipeline, --run-name, --preset and --set built from the inputs. The job's output is kept in the module's data folder; the answer comes back at once (or after wait_seconds). Fails when the workspace or recipe is missing.",
         "why": "Training takes minutes to hours, longer than one node may wait, so a pipeline is a job a graph starts and then watches.",
-        "best_uses": ["Kicking off pretraining or an SFT run from a schedule", "Training a series of presets side by side under different run names", "Chaining a judge graph to run when training finishes (on_complete_graph)"]
+        "best_uses": ["Kicking off pretraining or an SFT run from a schedule", "Training a series of presets side by side under different run names", "Chaining a judge graph to run when training succeeds (on_complete_graph)"]
       }
     },
     {
       "id": "run_stage",
       "title": "Run Lloom Stage",
       "category": "lloom",
-      "description": "Starts one Lloom stage script (scripts/<stage>.py) as a background job: prepare_data, train_tokenizer, tokenize_dataset, preflight, pretrain, finetune_sft_lora, finetune_sft_full, evaluate, judge or quantize. Answers at once with its job id, or after wait_seconds. Stages write data, tokenizers, checkpoints and eval results into the workspace.",
+      "description": "Starts one Lloom stage script (scripts/<stage>.py) as a background job: prepare_data, train_tokenizer, tokenize_dataset, preflight, pretrain, finetune_sft_lora, finetune_sft_full, evaluate, judge (the workspace's own judge script, set up in config/judge_config.yaml) or quantize. Answers at once with its job id, or after wait_seconds. Stages write data, tokenizers, checkpoints and eval results into the workspace.",
       "inputs": [
         {"name": "stage", "type": "str", "label": "Stage", "description": "the stage script to run", "widget": "select", "options": ["prepare_data", "train_tokenizer", "tokenize_dataset", "preflight", "pretrain", "finetune_sft_lora", "finetune_sft_full", "evaluate", "judge", "quantize"], "default": "evaluate"},
         {"name": "run_name", "type": "str", "label": "Run name", "description": "the run to read from and write to (runs/<run_name>/). Empty means 'default'", "widget": "string", "default": "", "required": false},
@@ -83,7 +83,7 @@
         {"name": "checkpoint", "type": "str", "label": "Checkpoint", "description": "evaluate and quantize: a workspace-relative checkpoint path. Empty uses the stage's default for the run", "widget": "string", "default": "", "required": false},
         {"name": "args", "type": "list[str]", "label": "Extra arguments", "description": "further command-line arguments passed to the script as they are", "widget": "json", "default": [], "required": false},
         {"name": "wait_seconds", "type": "int", "label": "Wait (s)", "description": "wait up to this long for the job to finish before answering; 0 answers at once. At most 280", "widget": "int", "default": 0, "min": 0, "max": 280, "step": 10, "required": false},
-        {"name": "on_complete_graph", "type": "str", "label": "Then run graph", "description": "a saved graph (slug) the HollowDeck core runs, unattended, when this job finishes. Empty for none", "widget": "string", "default": "", "required": false}
+        {"name": "on_complete_graph", "type": "str", "label": "Then run graph", "description": "a saved graph (slug) the HollowDeck core runs, unattended, when this job succeeds (not when it fails or is cancelled). Empty for none", "widget": "string", "default": "", "required": false}
       ],
       "outputs": [
         {"name": "job_id", "type": "str", "description": "the job's id"},
@@ -192,6 +192,7 @@
         {"name": "checkpoints", "type": "list[str]", "description": "workspace-relative checkpoint paths"},
         {"name": "eval", "type": "any", "description": "eval_results.json, or null"},
         {"name": "judge", "type": "any", "description": "judge_results.json, or null"},
+        {"name": "generations", "type": "any", "description": "what the evaluate stage generated (eval/generations.jsonl), ready for Lloom Judge Request; empty until the run is evaluated"},
         {"name": "summary", "type": "str", "description": "the numbers above as a few lines of text"}
       ],
       "effects": "reads",
@@ -239,37 +240,62 @@
       }
     },
     {
-      "id": "judge",
-      "title": "Lloom Judge",
+      "id": "judge_request",
+      "title": "Lloom Judge Request",
       "category": "lloom",
-      "description": "Grades responses with Claude (provider anthropic, which reaches the Claude API off this machine) or a local Ollama model, against a rubric: one integer score per item plus a justification, and the mean. Items come from Lloom Generate's results or any list of {prompt, response, reference}; a single prompt/response pair works too. Waits up to timeout_seconds.",
+      "description": "Builds the request that has a model grade responses against a rubric: the instructions, the prompt (every item numbered) and the JSON schema of the answer. Wire them into HollowDeck's Structured node with whatever Model node you judge with (a local Ollama model, or any provider HollowDeck has), then its data into Lloom Judge Scores. Calls no model itself.",
       "inputs": [
-        {"name": "items", "type": "any", "label": "Items", "description": "a list of {prompt, response, reference?} objects (Lloom Generate's results fit)", "widget": "json", "default": [], "required": false},
+        {"name": "items", "type": "any", "label": "Items", "description": "a list of {prompt, response, reference?} objects; Lloom Generate's results fit", "widget": "json", "default": [], "required": false},
         {"name": "prompt", "type": "str", "label": "Prompt", "description": "a single item's task", "widget": "text", "default": "", "required": false},
         {"name": "response", "type": "str", "label": "Response", "description": "a single item's response to grade", "widget": "text", "default": "", "required": false},
         {"name": "reference", "type": "str", "label": "Reference", "description": "a single item's reference answer, if any", "widget": "text", "default": "", "required": false},
-        {"name": "rubric", "type": "str", "label": "Rubric", "description": "what a good response does; empty uses the rubric in config/judge_config.yaml", "widget": "text", "default": "", "required": false},
-        {"name": "provider", "type": "str", "label": "Provider", "widget": "select", "options": ["anthropic", "ollama"], "default": "anthropic", "required": false},
-        {"name": "model", "type": "str", "label": "Model", "description": "empty: claude-opus-5-5 for anthropic, qwen3:1.7b for ollama", "widget": "string", "default": "", "required": false},
+        {"name": "rubric", "type": "str", "label": "Rubric", "description": "what a good response does; empty uses the workspace's config/judge_config.yaml, else a general rubric", "widget": "text", "default": "", "required": false},
         {"name": "max_score", "type": "int", "label": "Max score", "widget": "int", "default": 10, "min": 1, "max": 100, "required": false},
+        {"name": "max_items", "type": "int", "label": "Max items", "widget": "int", "default": 50, "min": 1, "max": 200, "required": false}
+      ],
+      "outputs": [
+        {"name": "instructions", "type": "str", "description": "for the Structured node's instructions: the grader's role, the scale and the rubric"},
+        {"name": "prompt", "type": "str", "description": "for the Structured node's prompt: every item, numbered"},
+        {"name": "schema", "type": "str", "description": "for the Structured node's schema: {verdicts: [{item, score, justification}]}"},
+        {"name": "items", "type": "any", "description": "the items as graded, for Lloom Judge Scores"},
+        {"name": "count", "type": "int", "description": "how many items the request grades"}
+      ],
+      "effects": "none",
+      "doc": {
+        "what": "Writes the grading request for an LLM judge, without calling a model.",
+        "how": "Normalises the items (prompt/question, response/completion/generated, reference/answer), numbers them, and writes instructions carrying the rubric and the 0..max_score scale, a prompt holding every item, and the JSON schema the answer must follow.",
+        "why": "Which model judges, and where it runs, is HollowDeck's to decide - a Model node - so the same judging works with a local model today and any provider HollowDeck adds later.",
+        "best_uses": ["Grading a checkpoint's generations with a local Ollama model", "Comparing runs on one rubric with one grader", "Swapping the grader by changing only the Model node"]
+      }
+    },
+    {
+      "id": "judge_scores",
+      "title": "Lloom Judge Scores",
+      "category": "lloom",
+      "description": "Reads a grader's answer back: matches each verdict to its item by number, clamps the scores, and gives the mean, the pass rate and a one-line summary. With a run name it also saves the result into the run (runs/<run>/eval/judge_results.json and judgements.jsonl), where Lloom Run Metrics and the Library show it. Calls no model.",
+      "inputs": [
+        {"name": "verdicts", "type": "any", "label": "Verdicts", "description": "the Structured node's data (or its text): {verdicts: [{item, score, justification}]}", "widget": "json", "default": {}},
+        {"name": "items", "type": "any", "label": "Items", "description": "Lloom Judge Request's items", "widget": "json", "default": []},
+        {"name": "max_score", "type": "int", "label": "Max score", "description": "the same scale the request used", "widget": "int", "default": 10, "min": 1, "max": 100, "required": false},
         {"name": "pass_threshold", "type": "float", "label": "Pass at", "description": "a score at or above this passes; -1 for no pass rate", "widget": "float", "default": 7, "required": false},
-        {"name": "max_items", "type": "int", "label": "Max items", "widget": "int", "default": 50, "min": 1, "max": 500, "required": false},
-        {"name": "timeout_seconds", "type": "int", "label": "Timeout (s)", "widget": "int", "default": 240, "min": 10, "max": 280, "required": false}
+        {"name": "provider", "type": "str", "label": "Provider", "description": "the grader's provider, for the record (wire the Structured node's provider)", "widget": "string", "default": "", "required": false},
+        {"name": "model", "type": "str", "label": "Model", "description": "the grader's model, for the record (wire the Structured node's model)", "widget": "string", "default": "", "required": false},
+        {"name": "run_name", "type": "str", "label": "Save to run", "description": "save the result into this run's eval folder; empty saves nothing", "widget": "string", "default": "", "required": false}
       ],
       "outputs": [
         {"name": "score", "type": "float", "description": "the mean score over the items that were scored"},
         {"name": "pass_rate", "type": "float", "description": "the fraction of scored items at or above pass_threshold"},
-        {"name": "scores", "type": "list[float]", "description": "one score per item; null where grading failed"},
+        {"name": "scores", "type": "list[float]", "description": "one score per item; null where the grader gave none"},
         {"name": "verdicts", "type": "any", "description": "[{prompt, response, reference, score, justification, passed, error}]"},
-        {"name": "summary", "type": "str", "description": "the result as a few lines of text"}
+        {"name": "summary", "type": "str", "description": "the result as one line of text"},
+        {"name": "saved", "type": "str", "description": "the workspace-relative judge_results.json written, or empty"}
       ],
-      "effects": "network",
-      "calls_model": true,
+      "effects": "writes",
       "doc": {
-        "what": "Has Claude or a local model grade responses against a rubric.",
-        "how": "Runs scripts/judge.py in the workspace, which asks the judge model for a JSON verdict per item (structured output) and averages the scores. The anthropic provider uses the Claude API with the credentials the anthropic SDK finds (ANTHROPIC_API_KEY or an ant auth login profile); ollama uses a model on this machine. Fails when no item could be graded.",
-        "why": "Loss says how well a model predicts text; a judge says whether what it writes is any good, which is what finetuning is for.",
-        "best_uses": ["Scoring an SFT checkpoint's answers after each finetune", "Comparing two runs' generations on one rubric", "Gating a release on a minimum judged score"]
+        "what": "Scores a grader's answer and can save it into the run it judged.",
+        "how": "Parses the answer (a bundle, an object, a list or JSON text), pairs verdicts with items by number, reports any item left without a verdict, and averages. With run_name it writes judge_results.json and judgements.jsonl under runs/<run>/eval/, the same files scripts/judge.py writes.",
+        "why": "A judged score belongs with the run it describes, beside its loss and perplexity, whichever model did the grading.",
+        "best_uses": ["Recording a judged score on every finetune", "Gating a release on a minimum score", "Reporting the worst-scored answers from verdicts"]
       }
     },
     {

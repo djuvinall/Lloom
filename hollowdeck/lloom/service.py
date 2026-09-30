@@ -20,7 +20,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from . import library
+from . import grading, library
 from . import workspace as ws
 from .core_client import CoreClient
 from .jobs import TERMINAL, JobManager, summarize
@@ -33,7 +33,7 @@ _RESPONSE_KEYS = ("response", "output", "completion", "answer")
 DOCTOR_CODE = r"""
 import importlib, json, sys
 out = {"python": sys.version.split()[0], "executable": sys.executable, "packages": {}}
-for name in ("torch", "numpy", "yaml", "sentencepiece", "safetensors", "anthropic",
+for name in ("torch", "numpy", "yaml", "sentencepiece", "safetensors",
              "matplotlib", "wandb"):
     try:
         mod = importlib.import_module(name)
@@ -191,7 +191,8 @@ class LloomService:
             "list_runs": self.tool_list_runs,
             "run_metrics": self.tool_run_metrics,
             "generate": self.tool_generate,
-            "judge": self.tool_judge,
+            "judge_request": self.tool_judge_request,
+            "judge_scores": self.tool_judge_scores,
             "add_sft_data": self.tool_add_sft_data,
             "sync_library": self.tool_sync_library,
         }
@@ -510,6 +511,7 @@ class LloomService:
             "checkpoints": [c["path"] for c in info["checkpoints"]],
             "eval": info["eval"],
             "judge": info["judge"],
+            "generations": read_generations(run_dir / "eval" / "generations.jsonl"),
             "summary": run_summary(info, phase),
         }}
 
@@ -525,8 +527,12 @@ class LloomService:
             raise ToolError(504, f"{kind} is still running after {timeout}s (job {rec['id']}); "
                                  f"read it with Lloom Job Status")
         if rec["status"] != "succeeded":
-            tail = self.jobs.tail(rec["id"], 3).replace("\n", " | ")
-            raise ToolError(500, f"{kind} failed (job {rec['id']}): {tail[-400:]}")
+            # The script's last line says why (a sys.exit message, or an exception's own
+            # line); the broker cuts a module's refusal short, so send that and no more.
+            lines = [line.strip() for line in self.jobs.tail(rec["id"], 20).splitlines()
+                     if line.strip()]
+            reason = lines[-1] if lines else rec.get("error") or "no output"
+            raise ToolError(500, f"{kind} failed (job {rec['id']}): {reason[:300]}")
         try:
             return rec, json.loads(out_path.read_text(encoding="utf-8"))
         except (OSError, ValueError) as exc:
@@ -579,7 +585,8 @@ class LloomService:
             argv += ["--seed", str(seed)]
         timeout = clamp_int(inputs.get("timeout_seconds"), 10, MAX_WAIT, 240)
         try:
-            _, payload = self._utility("generate", f"generate / {ckpt}", argv, out, timeout,
+            short = ckpt.replace("runs/", "", 1).replace("/checkpoints/", "/", 1)
+            _, payload = self._utility("generate", f"generate / {short}", argv, out, timeout,
                                        {"checkpoint": ckpt, "prompts": len(prompts)})
         finally:
             src.unlink(missing_ok=True)
@@ -590,63 +597,76 @@ class LloomService:
         return {"outputs": {"text": texts[0] if texts else "", "texts": texts,
                             "results": results, "checkpoint": payload.get("checkpoint", ckpt)}}
 
-    def tool_judge(self, inputs: dict) -> dict:
-        root = self.require_root()
-        if not (root / "scripts" / "judge.py").is_file():
-            raise ToolError(409, "this workspace has no scripts/judge.py")
-        items = parse_items(inputs.get("items"))
-        single = inputs.get("response")
-        if isinstance(single, str) and single.strip():
-            items.append({"prompt": inputs.get("prompt") or "", "response": single,
-                          "reference": inputs.get("reference") or ""})
-        if not items:
-            raise ToolError(400, "nothing to judge: give items, or a response")
-        provider = ws.unquote(inputs.get("provider")) or "anthropic"
-        if provider not in ("anthropic", "ollama"):
-            raise ToolError(400, f'provider "{provider}" is not anthropic or ollama')
-        max_items = clamp_int(inputs.get("max_items"), 1, 500, 50)
-        items = items[:max_items]
-        try:
-            config = ws.load_yaml(root / "config" / "judge_config.yaml") or {}
-        except Exception:
-            config = {}
-        model = ws.unquote(inputs.get("model"))
-        threshold = as_float(inputs.get("pass_threshold"), 7.0)
-        config.update({
-            "run_name": None,
-            "provider": provider,
-            "model": model or (config.get("model") if config.get("provider") == provider else None),
-            "max_items": len(items),
-            "max_score": clamp_int(inputs.get("max_score"), 1, 100, 10),
-            "pass_threshold": None if threshold < 0 else threshold,
-        })
-        rubric = inputs.get("rubric")
-        if isinstance(rubric, str) and rubric.strip():
-            config["rubric"] = rubric
-        import yaml
+    # -- judging: Lloom builds the request and reads the answer; HollowDeck's model
+    #    nodes make the call (see grading.py). No model, provider or URL lives here.
 
-        cfg_path, src, out = self._work(".judge.yaml"), self._work(".items.json"), self._work(".judge.json")
-        cfg_path.write_text(yaml.safe_dump(config, sort_keys=False), encoding="utf-8")
-        src.write_text(json.dumps(items, ensure_ascii=False), encoding="utf-8")
-        argv = [self.python, "scripts/judge.py", "--config", str(cfg_path), "--input", str(src),
-                "--out", str(out)]
-        timeout = clamp_int(inputs.get("timeout_seconds"), 10, MAX_WAIT, 240)
-        verdict_path = out.with_suffix(".jsonl")
+    def tool_judge_request(self, inputs: dict) -> dict:
         try:
-            _, summary = self._utility("judge", f"judge / {provider} / {len(items)} item(s)",
-                                       argv, out, timeout,
-                                       {"provider": provider, "items": len(items)})
-            verdicts = [json.loads(line) for line in
-                        verdict_path.read_text(encoding="utf-8").splitlines() if line.strip()]
-        finally:
-            for p in (cfg_path, src, out, verdict_path):
-                p.unlink(missing_ok=True)
+            items = grading.normalize_items(inputs.get("items"))
+            single = inputs.get("response")
+            if isinstance(single, str) and single.strip():
+                items.append({"prompt": str(inputs.get("prompt") or ""), "response": single,
+                              "reference": str(inputs.get("reference") or "")})
+            items = items[:clamp_int(inputs.get("max_items"), 1, grading.MAX_ITEMS, 50)]
+            rubric = inputs.get("rubric") if isinstance(inputs.get("rubric"), str) else ""
+            request = grading.build_request(items, rubric or self._workspace_rubric(),
+                                            clamp_int(inputs.get("max_score"), 1, 100, 10))
+        except grading.GradingError as exc:
+            raise ToolError(400, str(exc)) from None
+        return {"outputs": request}
+
+    def _workspace_rubric(self) -> str:
+        """The rubric in the workspace's config/judge_config.yaml, if it has one."""
+        if self.root is None:
+            return ""
+        try:
+            config = ws.load_yaml(self.root / "config" / "judge_config.yaml") or {}
+        except Exception:
+            return ""
+        rubric = config.get("rubric")
+        return rubric if isinstance(rubric, str) else ""
+
+    def tool_judge_scores(self, inputs: dict) -> dict:
+        max_score = clamp_int(inputs.get("max_score"), 1, 100, 10)
+        threshold = as_float(inputs.get("pass_threshold"), 7.0)
+        threshold = None if threshold < 0 else threshold
+        try:
+            items = grading.normalize_items(inputs.get("items"))
+            if not items:
+                raise grading.GradingError("items is empty: wire Lloom Judge Request's items")
+            verdicts = grading.parse_verdicts(inputs.get("verdicts"))
+        except grading.GradingError as exc:
+            raise ToolError(400, str(exc)) from None
+        result = grading.score(items, verdicts, max_score=max_score, pass_threshold=threshold,
+                               provider=ws.unquote(inputs.get("provider")),
+                               model=ws.unquote(inputs.get("model")))
+        summary = result["summary"]
+        saved = ""
+        run_name = ws.unquote(inputs.get("run_name"))
+        if run_name:
+            root = self.require_root()
+            out_dir = root / "runs" / self._run_name(run_name) / "eval"
+            out_dir.mkdir(parents=True, exist_ok=True)
+            with open(out_dir / "judgements.jsonl", "w", encoding="utf-8") as f:
+                for row in result["verdicts"]:
+                    f.write(json.dumps(row, ensure_ascii=False) + "\n")
+            record = dict(summary, input="a HollowDeck graph",
+                          verdicts=ws.rel(out_dir / "judgements.jsonl", root))
+            temp = out_dir / "judge_results.json.tmp"
+            temp.write_text(json.dumps(record, indent=2), encoding="utf-8")
+            temp.replace(out_dir / "judge_results.json")
+            saved = ws.rel(out_dir / "judge_results.json", root)
+            self.core.log("info", "lloom.judged", f"judged {run_name}: {judge_summary(summary)}",
+                          run_name=run_name, mean_score=summary["mean_score"],
+                          n_scored=summary["n_scored"], model=summary["model"])
+            self.sync_async()
         return {"outputs": {
-            "score": summary.get("mean_score"),
-            "pass_rate": summary.get("pass_rate"),
-            "scores": [v.get("score") for v in verdicts],
-            "verdicts": verdicts,
+            "score": summary["mean_score"],
+            "pass_rate": summary["pass_rate"],
+            "scores": [row["score"] for row in result["verdicts"]],
+            "verdicts": result["verdicts"],
             "summary": judge_summary(summary),
+            "saved": saved,
         }}
 
     def tool_add_sft_data(self, inputs: dict) -> dict:
@@ -863,6 +883,25 @@ class LloomService:
         }
 
 
+def read_generations(path: Path, limit: int = 200) -> list:
+    """What evaluate.py generated for the run ({question, reference, generated} rows),
+    ready for Lloom Judge Request; empty when the run has not been evaluated."""
+    rows: list = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            for line in f:
+                if line.strip():
+                    try:
+                        rows.append(json.loads(line))
+                    except ValueError:
+                        continue
+                if len(rows) >= limit:
+                    break
+    except OSError:
+        return []
+    return rows
+
+
 # -- text for a model or a person to read ----------------------------------------------
 
 def format_duration(seconds: float) -> str:
@@ -908,7 +947,11 @@ def run_summary(info: dict, phase: str = "pretrain") -> str:
 def judge_summary(summary: dict) -> str:
     if not summary:
         return "judge: no result"
-    text = (f"judge ({summary.get('provider')}:{summary.get('model')}): mean "
+    model = summary.get("model") or ""
+    provider = summary.get("provider") or ""
+    # A HollowDeck model string already carries its provider ("ollama:qwen3.5:9b").
+    grader = model if (not provider or model.startswith(provider + ":")) else f"{provider}:{model}"
+    text = (f"judge ({grader or 'unnamed model'}): mean "
             f"{_fmt(summary.get('mean_score'), 2)}/{summary.get('max_score')} over "
             f"{summary.get('n_scored')} of {summary.get('n_items')} item(s)")
     if summary.get("pass_rate") is not None:

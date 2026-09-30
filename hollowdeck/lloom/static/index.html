@@ -45,28 +45,28 @@
           <div class="k-rows" data-density="dense">
             <div class="k-row">
               <span class="k-row__label">Workspace</span>
-              <span class="k-row__value mono-sm" id="ws-root">&ndash;</span>
+              <span class="k-row__value mono-sm lloom-long" id="ws-root">&ndash;</span>
             </div>
             <div class="k-row">
               <span class="k-row__label">Interpreter</span>
-              <span class="k-row__value mono-sm" id="ws-python">&ndash;</span>
+              <span class="k-row__value mono-sm lloom-long" id="ws-python">&ndash;</span>
             </div>
             <div class="k-row">
               <span class="k-row__label">Environment</span>
-              <span class="k-row__value" id="ws-doctor">&ndash;</span>
+              <span class="k-row__value lloom-long" id="ws-doctor">&ndash;</span>
             </div>
             <div class="k-row">
               <span class="k-row__label">Library</span>
-              <span class="k-row__value" id="ws-library">&ndash;</span>
+              <span class="k-row__value lloom-long" id="ws-library">&ndash;</span>
             </div>
           </div>
           <div class="diag warning" id="doctor-problem" hidden>
             <span>!</span>
             <div id="doctor-problem-text"></div>
           </div>
-          <p class="pane-hint" id="network-note">The judge's <b>anthropic</b> provider reaches
-            the Claude API over the network. HollowDeck's Network switch does not govern it;
-            use the <b>ollama</b> provider to keep judging on this machine.</p>
+          <p class="pane-hint" id="judge-note">Lloom calls no model itself. To judge outputs,
+            a graph wires <b>Lloom Judge Request</b> into HollowDeck's <b>Structured</b> node
+            with any <b>Model</b> node, and its answer into <b>Lloom Judge Scores</b>.</p>
         </div>
       </div>
       <footer class="k-panel__footer">
@@ -111,7 +111,7 @@
           <div class="field-row">
             <label for="graph">Then run graph</label>
             <input class="input" id="graph" placeholder="saved graph slug (optional)" spellcheck="false">
-            <label class="lloom-check" id="dry-run-row"><input type="checkbox" id="dry-run"> Dry run</label>
+            <label class="lloom-check" id="dry-run-row"><input type="checkbox" id="dry-run" aria-label="Dry run"> Dry run</label>
           </div>
           <div class="diag error" id="launch-error" hidden>
             <span>&#x2715;</span>
@@ -142,7 +142,7 @@
         </div>
         <div class="table-wrap" id="jobs-wrap" hidden>
           <table class="hdeck-table">
-            <thead><tr><th>Status</th><th>Job</th><th>Stage</th><th>Progress</th><th>Started</th><th>Took</th><th></th></tr></thead>
+            <thead><tr><th>Status</th><th>Job</th><th>Stage</th><th>Progress</th><th>When</th><th></th></tr></thead>
             <tbody id="jobs"></tbody>
           </table>
         </div>

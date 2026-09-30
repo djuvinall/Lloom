@@ -88,3 +88,13 @@
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
+
+/* Long row values (paths, environment and library summaries). The kit's k-row__value
+   is flex: none, sized for short values, so a long path pushed the page wider than its
+   area. This takes the room the row has left and wraps inside it instead. */
+.lloom-long {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}

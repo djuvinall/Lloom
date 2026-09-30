@@ -160,7 +160,7 @@
       const pk = doc.packages || {};
       $("ws-doctor").textContent = "Python " + text(doc.python) + ", torch " + text(pk.torch) +
         (doc.cuda ? ", CUDA on " + text(doc.device) : ", CPU only") +
-        ", lloom " + text(doc.lloom) + (pk.anthropic ? ", anthropic " + pk.anthropic : ", no anthropic SDK");
+        ", lloom " + text(doc.lloom);
     } else {
       $("ws-doctor").textContent = "has a problem";
     }
@@ -273,8 +273,7 @@
         el("td", { text: job.title, title: job.error || job.job_id }),
         el("td", { text: text(job.stage) }),
         progressCell(job),
-        el("td", { text: when(job.started_at || job.created_at) }),
-        el("td", { class: "lloom-num", text: job.started_at ? duration(job.elapsed_seconds) : "–" }),
+        el("td", { class: "lloom-num", text: when(job.started_at || job.created_at) + (job.started_at ? " · " + duration(job.elapsed_seconds) : "") }),
         el("td", {}, [el("div", { class: "actions" }, actions)]),
       ]);
       return row;

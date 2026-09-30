@@ -124,11 +124,20 @@ def test_every_tool_writes_effects_and_a_full_doc():
         assert tool.get("description"), tool["id"]
 
 
-def test_tools_that_ask_a_model_say_so():
+def test_the_module_calls_no_model_provider_itself():
+    # Which model judges, and where it runs, is HollowDeck's: a Model node and its own
+    # Structured node. The module writes the request and reads the answer, nothing more.
     by_id = {t["id"]: t for t in MANIFEST["tools"]}
-    assert by_id["generate"]["calls_model"] is True
-    assert by_id["judge"]["calls_model"] is True
-    assert by_id["judge"]["effects"] == "network"  # the anthropic provider leaves the machine
+    assert "judge" not in by_id
+    assert by_id["judge_request"]["effects"] == "none"
+    assert not by_id["judge_request"].get("calls_model")
+    assert not by_id["judge_scores"].get("calls_model")
+    assert by_id["generate"]["calls_model"] is True  # the workspace's own checkpoint, locally
+    assert all(t["effects"] != "network" for t in MANIFEST["tools"]), "nothing leaves the machine"
+    for path in [*MODULE_DIR.glob("*.py"), *OWN_STATIC]:
+        text = _read(path).lower()
+        for marker in ("anthropic", "11434", "api.openai", "urlopen(", "import httpx"):
+            assert marker not in text, f"{marker} in {path.name}"
 
 
 def test_manifest_ids_leave_the_recipe_node_namespace_free():
@@ -933,47 +942,82 @@ def test_generate_uses_the_runs_model(mod):
     assert tool(mod.client, "generate", prompt="x", run_name="g1", device="tpu")[0] == 400
 
 
-def _ollama(path, body):
-    user = body["messages"][1]["content"]
-    response = re.search(r"<response>\n(.*?)\n</response>", user, re.S).group(1)
-    score = 9 if "good" in response else 2
-    return 200, {"message": {"content": json.dumps({"score": score, "justification": f"saw {response}"})}}
+GRADING = importlib.import_module(PKG.__name__ + ".grading")
+
+ITEMS = [{"prompt": "p1", "completion": "a good answer"},
+         {"question": "q2", "generated": "bad", "reference": "r2"}]
+# What HollowDeck's Structured node puts on its `data` wire: a bundle, nested ones too.
+ANSWER = {"$bundle": {"verdicts": [
+    {"$bundle": {"item": 1, "score": 9, "justification": "on topic"}},
+    {"item": 2, "score": 14, "justification": "over the scale"},
+    {"item": 7, "score": 3, "justification": "a stray item number"}]}}
 
 
-def test_judge_runs_the_real_judge_against_a_local_model(tmp_path):
-    with fake_server(_ollama) as (server, url):
-        ws = make_workspace(tmp_path / "ws", ollama_url=url)
-        app = _app(tmp_path, ws)
-        client = TestClient(app)
-        try:
-            items = [{"prompt": "p1", "completion": "a good answer"},
-                     {"prompt": "p2", "completion": "bad"}]
-            code, out = tool(client, "judge", items=items, provider="ollama",
-                             rubric="Custom rubric here.", pass_threshold=7)
-            assert code == 200, out
-            assert out["scores"] == [9.0, 2.0] and out["score"] == 5.5 and out["pass_rate"] == 0.5
-            assert out["verdicts"][0]["justification"] == "saw a good answer"
-            assert "ollama" in out["summary"] and "5.50/10" in out["summary"]
-            sent = server.calls[0][2]
-            assert "Custom rubric here." in sent["messages"][1]["content"]
-            assert sent["format"]["required"] == ["score", "justification"]
-            code, single = tool(client, "judge", prompt="q", response="good", provider="ollama")
-            assert code == 200 and single["scores"] == [9.0]
-            assert tool(client, "judge", provider="ollama")[0] == 400
-            assert tool(client, "judge", response="x", provider="openai")[0] == 400
-        finally:
-            app.state.service.shutdown()
+def test_judge_request_builds_the_three_texts(mod):
+    code, out = tool(mod.client, "judge_request", items=ITEMS, max_score=5)
+    assert code == 200 and out["count"] == 2
+    assert "Workspace rubric." in out["instructions"]  # the workspace's judge_config.yaml
+    assert "from 0 to 5" in out["instructions"]
+    assert '<item number="2">' in out["prompt"] and "<reference_answer>\nr2" in out["prompt"]
+    assert json.loads(out["schema"])["required"] == ["verdicts"]
+    assert out["items"][1] == {"prompt": "q2", "response": "bad", "reference": "r2"}
+    code, own = tool(mod.client, "judge_request", prompt="t", response="x", rubric="Mine.")
+    assert code == 200 and "Mine." in own["instructions"] and own["count"] == 1
+    assert tool(mod.client, "judge_request")[0] == 400
 
 
-def test_judge_fails_the_node_when_nothing_could_be_judged(tmp_path):
-    with fake_server(lambda p, b: (500, {"error": "boom"})) as (_, url):
-        ws = make_workspace(tmp_path / "ws", ollama_url=url)
-        app = _app(tmp_path, ws)
-        try:
-            code, detail = tool(TestClient(app), "judge", response="x", provider="ollama")
-            assert code == 500 and "judge failed" in detail
-        finally:
-            app.state.service.shutdown()
+def test_judge_request_needs_no_workspace(tmp_path):
+    app = _app(tmp_path, workspace=None)
+    try:
+        code, out = tool(TestClient(app), "judge_request", response="x")
+        assert code == 200 and GRADING.DEFAULT_RUBRIC in out["instructions"]
+    finally:
+        app.state.service.shutdown()
+
+
+def test_judge_scores_reads_the_structured_answer(mod):
+    code, out = tool(mod.client, "judge_scores", verdicts=ANSWER, items=ITEMS, max_score=10,
+                     pass_threshold=7, provider="ollama", model="ollama:qwen3.5:9b")
+    assert code == 200, out
+    assert out["scores"] == [9.0, 10.0] and out["score"] == 9.5 and out["pass_rate"] == 1.0
+    assert out["verdicts"][0]["justification"] == "on topic" and out["saved"] == ""
+    assert "judge (ollama:qwen3.5:9b): mean 9.50/10" in out["summary"]
+    # The answer as text works too, and an item the grader skipped is named, not guessed.
+    code, out = tool(mod.client, "judge_scores", items=ITEMS,
+                     verdicts='{"verdicts": [{"item": 1, "score": 4, "justification": "meh"}]}')
+    assert out["scores"] == [4.0, None] and "no verdict" in out["verdicts"][1]["error"]
+    assert "1 error(s)" in out["summary"]
+    assert tool(mod.client, "judge_scores", verdicts={"nope": 1}, items=ITEMS)[0] == 400
+    assert tool(mod.client, "judge_scores", verdicts=ANSWER, items=[])[0] == 400
+
+
+def test_judge_scores_saves_into_the_run(mod):
+    tool(mod.client, "run_stage", stage="pretrain", run_name="j1", wait_seconds=60)
+    code, out = tool(mod.client, "judge_scores", verdicts=ANSWER, items=ITEMS, run_name="j1",
+                     model="ollama:qwen3.5:9b")
+    assert code == 200 and out["saved"] == "runs/j1/eval/judge_results.json"
+    saved = json.loads((mod.ws / out["saved"]).read_text())
+    assert saved["mean_score"] == 9.5 and saved["verdicts"] == "runs/j1/eval/judgements.jsonl"
+    rows = (mod.ws / "runs/j1/eval/judgements.jsonl").read_text().splitlines()
+    assert len(rows) == 2 and json.loads(rows[0])["score"] == 9.0
+    code, metrics = tool(mod.client, "run_metrics", run_name="j1")
+    assert metrics["judge"]["mean_score"] == 9.5 and "judge (ollama:qwen3.5:9b)" in metrics["summary"]
+    assert tool(mod.client, "judge_scores", verdicts=ANSWER, items=ITEMS, run_name="../x")[0] == 400
+
+
+def test_grading_unwraps_and_normalizes():
+    assert GRADING.unwrap({"$bundle": {"a": {"$bundle": {"b": [1, {"$bundle": {"c": 2}}]}}}}) == \
+        {"a": {"b": [1, {"c": 2}]}}
+    assert GRADING.unwrap('[{"x": 1}]') == [{"x": 1}]
+    rows = GRADING.normalize_items('{"prompt": "a", "response": "b"}\n{"question": "c", "text": "d"}')
+    assert rows == [{"prompt": "a", "response": "b", "reference": ""},
+                    {"prompt": "c", "response": "d", "reference": ""}]
+    assert GRADING.normalize_items({"items": [{"response": "z"}]})[0]["response"] == "z"
+    assert GRADING.parse_verdicts([{"item": 1, "score": 2}, "junk"]) == [{"item": 1, "score": 2}]
+    with pytest.raises(GRADING.GradingError):
+        GRADING.normalize_items(42)
+    with pytest.raises(GRADING.GradingError):
+        GRADING.build_request([{"prompt": "", "response": "x", "reference": ""}] * 201)
 
 
 # -- SFT data ----------------------------------------------------------------------------

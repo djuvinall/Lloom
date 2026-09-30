@@ -72,6 +72,16 @@ def create_app(ctx: Any = None, *, start: bool = True) -> Any:
     app.state.service = service
     app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
+    @app.middleware("http")
+    async def revalidate_panel_files(request: Any, call_next: Any) -> Any:
+        # The panel's files change when the module is updated in place (a `git pull`),
+        # and a browser that cached them heuristically would keep showing the old page.
+        # no-cache means "revalidate each time": a 304 on loopback when nothing changed.
+        response = await call_next(request)
+        if request.url.path == "/" or request.url.path.startswith("/static/"):
+            response.headers["cache-control"] = "no-cache"
+        return response
+
     def fail(exc: ToolError) -> JSONResponse:
         return JSONResponse(status_code=exc.status, content={"detail": exc.detail})
 
