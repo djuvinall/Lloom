@@ -101,6 +101,14 @@ up to four minutes and returns immediately once the job has ended. Or set **Then
 graph** (`on_complete_graph`): when the job *succeeds*, the core runs that saved graph,
 unattended.
 
+> **Known HollowDeck limit (as of core 0.1.0): the editor's Run button gives up after
+> 60 s.** It waits on one request for the whole graph, and the core cuts any request to
+> a module at 60 s (`PROXY_TIMEOUT`, `core/src-rust/src/proxy.rs`); the Run tab is then
+> left showing *running…*. Graphs that train take longer. Until HollowDeck lifts the limit,
+> run them with **Run now** in the Schedules panel (or the core's `POST /api/run` with
+> `{"graph": "<slug>"}`), which has no such cut: the result is in the run's folder
+> (`hollowdeck_data/runs/<id>/run.json`) and, for a judged score, in the Lloom run itself.
+
 While a job is queued or running the module holds itself alive (`GET /lifecycle`), and
 its processes are tied to it: stopping or disabling the module stops them. A job left
 running by a stopped module is marked `interrupted`; a pretrain run resumes from its
