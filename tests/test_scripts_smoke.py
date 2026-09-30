@@ -104,6 +104,14 @@ def run_smoke(tmp: str) -> None:
     data = json.loads(res.read_text())
     assert "perplexity/total" in data, data       # evaluate.py keys perplexity by source/total
 
+    # Batch generation, JSON out (what the HollowDeck module's `generate` tool runs).
+    run("scripts/generate.py", "--checkpoint", "runs/default/checkpoints/pretrain/best.pt",
+        "--prompt", "The quick", "--prompt", "A river", "--max_new_tokens", "6",
+        "--device", "cpu", "--seed", "1", "--out", "runs/default/generations.json")
+    gen = json.loads((work / "runs/default/generations.json").read_text(encoding="utf-8"))
+    assert [r["prompt"] for r in gen["results"]] == ["The quick", "A river"], gen
+    assert all(r["n_tokens"] <= 6 for r in gen["results"]), gen
+
     # SFT on the tiny bundled sample: deliberately fewer steps than
     # eval_interval, so this also guards the end-of-training best.pt guarantee
     # (adapter save + merge crash without it).
@@ -113,8 +121,15 @@ def run_smoke(tmp: str) -> None:
     merged = work / "runs/default/checkpoints/sft_lora/merged.pt"
     assert merged.exists(), f"sft lora did not produce {merged}"
 
+    # With no --checkpoint, generate picks the run's newest finished stage: the merged SFT model.
+    run("scripts/generate.py", "--chat", "--prompt", "Explain wind.", "--max_new_tokens", "4",
+        "--device", "cpu", "--out", "runs/default/chat.json")
+    chat = json.loads((work / "runs/default/chat.json").read_text(encoding="utf-8"))
+    assert chat["checkpoint"].endswith("sft_lora/merged.pt"), chat["checkpoint"]
+    assert chat["results"][0]["input"].startswith("<|prompt|>"), chat
+
     print("ok scripts smoke (prepare -> tokenizer -> tokenize -> preflight -> "
-          "pretrain -> evaluate -> sft_lora; runs/ namespacing intact)")
+          "pretrain -> evaluate -> generate -> sft_lora -> generate; runs/ namespacing intact)")
 
 
 def test_scripts_smoke() -> None:

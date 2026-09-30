@@ -170,8 +170,10 @@ class AnthropicJudge:
         return json.loads(text)
 
     def _call(self, kwargs: dict):
-        import anthropic
-
+        try:
+            import anthropic
+        except ImportError:  # an injected client without the SDK installed (tests)
+            return self.client.beta.messages.create(**kwargs)
         try:
             return self.client.beta.messages.create(**kwargs)
         except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as exc:

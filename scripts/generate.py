@@ -111,11 +111,13 @@ def main():
                         "n_tokens": len(new_ids)})
     payload = {"checkpoint": str(ckpt).replace("\\", "/"), "device": str(device),
                "seconds": round(time.time() - started, 3), "results": results}
-    text = json.dumps(payload, indent=2, ensure_ascii=False)
     if args.out:
         Path(args.out).parent.mkdir(parents=True, exist_ok=True)
-        Path(args.out).write_text(text, encoding="utf-8")
-    print(text)
+        Path(args.out).write_text(json.dumps(payload, indent=2, ensure_ascii=False),
+                                  encoding="utf-8")
+    # ASCII-escaped on stdout: a model can emit anything, and a Windows console's
+    # code page cannot print everything (the file above keeps the real characters).
+    print(json.dumps(payload, indent=2))
 
 
 if __name__ == "__main__":

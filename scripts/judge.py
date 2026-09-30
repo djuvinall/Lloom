@@ -47,6 +47,9 @@ def main():
                     help="summary JSON path; judgements.jsonl is written beside it")
     args = ap.parse_args()
     cfg = load_config(args.config, preset=args.preset, sets=args.sets)
+    # Verdicts quote model output; never let a console code page crash the run.
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(errors="backslashreplace")
 
     src = Path(args.input or cfg.input)
     if not src.exists():
