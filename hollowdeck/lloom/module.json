@@ -1,0 +1,361 @@
+{
+  "id": "lloom",
+  "name": "Lloom",
+  "version": "0.1.2",
+  "description": "Train, finetune, evaluate and judge language models with Lloom from HollowDeck. Every tool runs one of the Lloom workspace's own stage scripts as a background job, so a graph can start a pipeline, wait on it, read its metrics, generate from the checkpoint it produced, and have a model grade the result. Lloom calls no model provider itself: judging is a request Lloom writes and HollowDeck's own model nodes carry out, with whichever model you pick. Publishes the workspace's recipes, presets, stage scripts, runs and checkpoints to the Asset Library.",
+  "kind": "process",
+  "command": ["{python}", "__main__.py"],
+  "verify": ["{python}", "selfcheck.py"],
+  "panels": [
+    {"id": "main", "title": "Lloom", "path": ""}
+  ],
+  "tools_file": "tools.json",
+  "tools": [
+    {
+      "id": "status",
+      "title": "Lloom Status",
+      "category": "lloom",
+      "description": "What the Lloom workspace holds right now: its folder, the interpreter jobs run under, the pipeline recipes, model presets, stage scripts and runs, and how many jobs are queued or running. Reads files only.",
+      "inputs": [],
+      "outputs": [
+        {"name": "configured", "type": "bool", "description": "true when a usable Lloom workspace was found"},
+        {"name": "workspace", "type": "str", "description": "the workspace folder"},
+        {"name": "python", "type": "str", "description": "the interpreter every job runs under"},
+        {"name": "recipes", "type": "list[str]", "description": "pipeline recipes (config/pipelines/*.yaml)"},
+        {"name": "presets", "type": "list[str]", "description": "model presets (config/presets/*.yaml)"},
+        {"name": "stages", "type": "list[str]", "description": "stage scripts (scripts/*.py)"},
+        {"name": "runs", "type": "list[str]", "description": "run names under runs/"},
+        {"name": "active_jobs", "type": "int", "description": "jobs queued or running"},
+        {"name": "problem", "type": "str", "description": "why the workspace is not usable, or empty"}
+      ],
+      "effects": "reads",
+      "doc": {
+        "what": "Reports the Lloom workspace this module drives and what is in it.",
+        "how": "Reads the module's settings, the workspace's config/, scripts/ and runs/ folders, and the job list. Starts nothing.",
+        "why": "A graph can check the workspace is usable, and pick a recipe or run by name, before it starts anything expensive.",
+        "best_uses": ["The first node of a training graph, to fail early with a readable reason", "Listing runs to evaluate or compare"]
+      }
+    },
+    {
+      "id": "run_pipeline",
+      "title": "Run Lloom Pipeline",
+      "category": "lloom",
+      "description": "Starts a Lloom pipeline recipe (config/pipelines/<recipe>.yaml, e.g. pretrain, sft, release) as a background job and answers at once with its job id, or after wait_seconds if it finishes sooner. Runs the workspace's scripts, which train models and write checkpoints under runs/<run_name>/; a run name that already has checkpoints is resumed or overwritten by its stages. Jobs queue when the module's concurrency limit is reached.",
+      "inputs": [
+        {"name": "recipe", "type": "str", "label": "Recipe", "description": "a recipe name from config/pipelines (pretrain, sft, release, ...) or a workspace-relative path to a recipe YAML", "widget": "string", "default": "pretrain"},
+        {"name": "run_name", "type": "str", "label": "Run name", "description": "names the run; its outputs land in runs/<run_name>/. Empty means 'default'", "widget": "string", "default": "", "required": false},
+        {"name": "preset", "type": "str", "label": "Preset", "description": "a model preset name from config/presets (nano, small, base, large, ...), forwarded to every stage that takes overrides. Empty for none", "widget": "string", "default": "", "required": false},
+        {"name": "sets", "type": "list[str]", "label": "Overrides", "description": "dotted config overrides, one per item, e.g. [\"training.max_steps=200\", \"device=cpu\"]. A newline-separated string works too", "widget": "json", "default": [], "required": false},
+        {"name": "only", "type": "str", "label": "Only stage", "description": "run just this stage of the recipe", "widget": "string", "default": "", "required": false},
+        {"name": "from_stage", "type": "str", "label": "From stage", "description": "start at this stage (resume a run that died)", "widget": "string", "default": "", "required": false},
+        {"name": "until", "type": "str", "label": "Until stage", "description": "stop after this stage", "widget": "string", "default": "", "required": false},
+        {"name": "dry_run", "type": "bool", "label": "Dry run", "description": "print the stage commands without running them", "widget": "bool", "default": false, "required": false},
+        {"name": "wait_seconds", "type": "int", "label": "Wait (s)", "description": "wait up to this long for the job to finish before answering; 0 answers at once. At most 280", "widget": "int", "default": 0, "min": 0, "max": 280, "step": 10, "required": false},
+        {"name": "on_complete_graph", "type": "str", "label": "Then run graph", "description": "a saved graph (slug) the HollowDeck core runs, unattended, when this job succeeds (not when it fails or is cancelled). Empty for none", "widget": "string", "default": "", "required": false}
+      ],
+      "outputs": [
+        {"name": "job_id", "type": "str", "description": "the job's id, for Lloom Job Status and Cancel"},
+        {"name": "status", "type": "str", "description": "queued, running, succeeded, failed, cancelled or interrupted"},
+        {"name": "done", "type": "bool", "description": "true once the job has ended, however it ended"},
+        {"name": "ok", "type": "bool", "description": "true only when the job succeeded"},
+        {"name": "run_name", "type": "str", "description": "the run the job writes to"},
+        {"name": "log_tail", "type": "str", "description": "the last lines of the job's output"},
+        {"name": "job", "type": "any", "description": "the whole job record"}
+      ],
+      "effects": "executes",
+      "doc": {
+        "what": "Starts a Lloom pipeline recipe as a background job.",
+        "how": "Runs scripts/run_pipeline.py in the workspace under the configured interpreter, with --pipeline, --run-name, --preset and --set built from the inputs. The job's output is kept in the module's data folder; the answer comes back at once (or after wait_seconds). Fails when the workspace or recipe is missing.",
+        "why": "Training takes minutes to hours, longer than one node may wait, so a pipeline is a job a graph starts and then watches.",
+        "best_uses": ["Kicking off pretraining or an SFT run from a schedule", "Training a series of presets side by side under different run names", "Chaining a judge graph to run when training succeeds (on_complete_graph)"]
+      }
+    },
+    {
+      "id": "run_stage",
+      "title": "Run Lloom Stage",
+      "category": "lloom",
+      "description": "Starts one Lloom stage script (scripts/<stage>.py) as a background job: prepare_data, train_tokenizer, tokenize_dataset, preflight, pretrain, finetune_sft_lora, finetune_sft_full, evaluate, judge (the workspace's own judge script, set up in config/judge_config.yaml) or quantize. Answers at once with its job id, or after wait_seconds. Stages write data, tokenizers, checkpoints and eval results into the workspace.",
+      "inputs": [
+        {"name": "stage", "type": "str", "label": "Stage", "description": "the stage script to run", "widget": "select", "options": ["prepare_data", "train_tokenizer", "tokenize_dataset", "preflight", "pretrain", "finetune_sft_lora", "finetune_sft_full", "evaluate", "judge", "quantize"], "default": "evaluate"},
+        {"name": "run_name", "type": "str", "label": "Run name", "description": "the run to read from and write to (runs/<run_name>/). Empty means 'default'", "widget": "string", "default": "", "required": false},
+        {"name": "preset", "type": "str", "label": "Preset", "description": "a model preset name, for stages that take one. Empty for none", "widget": "string", "default": "", "required": false},
+        {"name": "sets", "type": "list[str]", "label": "Overrides", "description": "dotted config overrides, one per item, e.g. [\"device=cpu\"]", "widget": "json", "default": [], "required": false},
+        {"name": "checkpoint", "type": "str", "label": "Checkpoint", "description": "evaluate and quantize: a workspace-relative checkpoint path. Empty uses the stage's default for the run", "widget": "string", "default": "", "required": false},
+        {"name": "args", "type": "list[str]", "label": "Extra arguments", "description": "further command-line arguments passed to the script as they are", "widget": "json", "default": [], "required": false},
+        {"name": "wait_seconds", "type": "int", "label": "Wait (s)", "description": "wait up to this long for the job to finish before answering; 0 answers at once. At most 280", "widget": "int", "default": 0, "min": 0, "max": 280, "step": 10, "required": false},
+        {"name": "on_complete_graph", "type": "str", "label": "Then run graph", "description": "a saved graph (slug) the HollowDeck core runs, unattended, when this job succeeds (not when it fails or is cancelled). Empty for none", "widget": "string", "default": "", "required": false}
+      ],
+      "outputs": [
+        {"name": "job_id", "type": "str", "description": "the job's id"},
+        {"name": "status", "type": "str", "description": "queued, running, succeeded, failed, cancelled or interrupted"},
+        {"name": "done", "type": "bool", "description": "true once the job has ended"},
+        {"name": "ok", "type": "bool", "description": "true only when the job succeeded"},
+        {"name": "run_name", "type": "str", "description": "the run the job writes to"},
+        {"name": "log_tail", "type": "str", "description": "the last lines of the job's output"},
+        {"name": "job", "type": "any", "description": "the whole job record"}
+      ],
+      "effects": "executes",
+      "doc": {
+        "what": "Starts one Lloom stage script as a background job.",
+        "how": "Runs scripts/<stage>.py in the workspace under the configured interpreter with --preset, --set run_name=... and your overrides, plus --checkpoint for evaluate and quantize. Answers with the job id at once or after wait_seconds.",
+        "why": "A graph that owns the order of work - evaluate this checkpoint, then judge it - needs single stages, not whole recipes.",
+        "best_uses": ["Evaluating a checkpoint a pipeline produced", "Re-running the judge with a different rubric", "Quantizing a finished run for release"]
+      }
+    },
+    {
+      "id": "job_status",
+      "title": "Lloom Job Status",
+      "category": "lloom",
+      "description": "The state of a Lloom job, optionally waiting up to wait_seconds for it to end: status, current stage, training progress, the latest metrics, and the tail of its output. An empty job_id means the most recent job. Put it in a Repeat zone to wait on a long run.",
+      "inputs": [
+        {"name": "job_id", "type": "str", "label": "Job id", "description": "the job to read; empty for the most recent job", "widget": "string", "default": "", "required": false},
+        {"name": "wait_seconds", "type": "int", "label": "Wait (s)", "description": "wait up to this long for the job to end; 0 answers at once. At most 280", "widget": "int", "default": 0, "min": 0, "max": 280, "step": 10, "required": false},
+        {"name": "tail_lines", "type": "int", "label": "Log lines", "description": "how many trailing lines of output to return", "widget": "int", "default": 40, "min": 0, "max": 500, "required": false}
+      ],
+      "outputs": [
+        {"name": "job_id", "type": "str", "description": "the job's id"},
+        {"name": "status", "type": "str", "description": "queued, running, succeeded, failed, cancelled or interrupted"},
+        {"name": "done", "type": "bool", "description": "true once the job has ended"},
+        {"name": "ok", "type": "bool", "description": "true only when the job succeeded"},
+        {"name": "exit_code", "type": "int", "description": "the process exit code, or -1 while it runs"},
+        {"name": "stage", "type": "str", "description": "the stage running now, or the last one that ran"},
+        {"name": "run_name", "type": "str", "description": "the run the job writes to"},
+        {"name": "progress", "type": "float", "description": "training progress from 0 to 1, when the log says"},
+        {"name": "elapsed_seconds", "type": "float", "description": "how long the job has run"},
+        {"name": "log_tail", "type": "str", "description": "the last lines of output"},
+        {"name": "metrics", "type": "any", "description": "the run's latest metrics and eval results"},
+        {"name": "job", "type": "any", "description": "the whole job record"}
+      ],
+      "effects": "reads",
+      "doc": {
+        "what": "Reads a job's state, and can wait for it to end.",
+        "how": "Reads the job record and log the module keeps, and the run's metrics CSV and eval files in the workspace. With wait_seconds it blocks until the job ends or the time is up, whichever is first.",
+        "why": "A node may wait about five minutes; a Repeat zone around this node waits on a training run of any length, and each pass costs nothing once the job has ended.",
+        "best_uses": ["Waiting on a pipeline inside a Repeat zone", "Branching on whether training succeeded", "Reading the loss a run finished at"]
+      }
+    },
+    {
+      "id": "cancel_job",
+      "title": "Cancel Lloom Job",
+      "category": "lloom",
+      "description": "Stops a queued or running Lloom job, and every process it started. A stopped pretraining run can be resumed later from its last checkpoint.",
+      "inputs": [
+        {"name": "job_id", "type": "str", "label": "Job id", "description": "the job to stop", "widget": "string", "default": ""}
+      ],
+      "outputs": [
+        {"name": "job_id", "type": "str", "description": "the job's id"},
+        {"name": "status", "type": "str", "description": "the job's status after the request"},
+        {"name": "cancelled", "type": "bool", "description": "true if this call stopped it"}
+      ],
+      "effects": "executes",
+      "doc": {
+        "what": "Stops a Lloom job and its child processes.",
+        "how": "A queued job is withdrawn; a running one has its whole process tree terminated. The job is recorded as cancelled.",
+        "why": "A graph that watches a run - for divergence, or a time budget - needs a way to stop it.",
+        "best_uses": ["Stopping a run whose loss diverged", "Enforcing a time budget on an experiment"]
+      }
+    },
+    {
+      "id": "list_runs",
+      "title": "List Lloom Runs",
+      "category": "lloom",
+      "description": "Every run under the workspace's runs/ folder, newest first, with its checkpoints, latest metrics, eval results and judge results. Reads files only.",
+      "inputs": [],
+      "outputs": [
+        {"name": "runs", "type": "list[str]", "description": "run names, newest first"},
+        {"name": "latest_run", "type": "str", "description": "the most recently changed run, or empty"},
+        {"name": "details", "type": "any", "description": "one object per run: checkpoints, metrics, eval, judge"}
+      ],
+      "effects": "reads",
+      "doc": {
+        "what": "Lists the workspace's training runs.",
+        "how": "Scans runs/<name>/ for checkpoints, logs/metrics.csv, logs/sft_metrics.csv, eval/eval_results.json and eval/judge_results.json.",
+        "why": "Comparing runs, or picking the newest one to evaluate, starts from knowing what exists.",
+        "best_uses": ["Comparing presets trained side by side", "Finding the newest run to evaluate or judge"]
+      }
+    },
+    {
+      "id": "run_metrics",
+      "title": "Lloom Run Metrics",
+      "category": "lloom",
+      "description": "One run's numbers: the latest step and train loss, validation loss and perplexity, the best validation loss, its checkpoints, eval results and judge results, plus a short summary a model can read. Reads files only.",
+      "inputs": [
+        {"name": "run_name", "type": "str", "label": "Run name", "description": "the run to read; empty means 'default'", "widget": "string", "default": "", "required": false},
+        {"name": "phase", "type": "str", "label": "Phase", "description": "pretrain reads logs/metrics.csv, sft reads logs/sft_metrics.csv", "widget": "select", "options": ["pretrain", "sft"], "default": "pretrain", "required": false}
+      ],
+      "outputs": [
+        {"name": "step", "type": "int", "description": "the last logged step, or -1"},
+        {"name": "train_loss", "type": "float", "description": "the last logged training loss"},
+        {"name": "val_loss", "type": "float", "description": "the last validation loss"},
+        {"name": "val_perplexity", "type": "float", "description": "the last validation perplexity"},
+        {"name": "best_val_loss", "type": "float", "description": "the lowest validation loss logged"},
+        {"name": "checkpoints", "type": "list[str]", "description": "workspace-relative checkpoint paths"},
+        {"name": "eval", "type": "any", "description": "eval_results.json, or null"},
+        {"name": "judge", "type": "any", "description": "judge_results.json, or null"},
+        {"name": "generations", "type": "any", "description": "what the evaluate stage generated (eval/generations.jsonl), ready for Lloom Judge Request; empty until the run is evaluated"},
+        {"name": "summary", "type": "str", "description": "the numbers above as a few lines of text"}
+      ],
+      "effects": "reads",
+      "doc": {
+        "what": "Reads one run's training metrics and evaluation results.",
+        "how": "Parses the run's metrics CSV (train and validation rows are interleaved) and its eval and judge JSON files. A missing file leaves its outputs null.",
+        "why": "A graph deciding what to do next - finetune, stop, report - needs the numbers, and a model reading a report needs them as text.",
+        "best_uses": ["Gating an SFT run on the pretraining loss", "Writing a nightly training report with a model"]
+      }
+    },
+    {
+      "id": "generate",
+      "title": "Lloom Generate",
+      "category": "lloom",
+      "description": "Generates text from a Lloom checkpoint for one prompt or a list of prompts, and waits for it (up to timeout_seconds). Checkpoint empty: the run's newest finished stage (SFT merged, then SFT full, then pretrain). Chat wraps each prompt in the SFT template. Runs the local model in a Lloom process; nothing leaves the machine.",
+      "inputs": [
+        {"name": "prompt", "type": "str", "label": "Prompt", "description": "one prompt", "widget": "text", "default": "", "required": false},
+        {"name": "prompts", "type": "list[str]", "label": "Prompts", "description": "several prompts; each gets its own completion, after 'prompt' if both are given", "widget": "json", "default": [], "required": false},
+        {"name": "run_name", "type": "str", "label": "Run name", "description": "the run whose checkpoint to use; empty means 'default'", "widget": "string", "default": "", "required": false},
+        {"name": "checkpoint", "type": "str", "label": "Checkpoint", "description": "a workspace-relative checkpoint path; wins over run_name", "widget": "string", "default": "", "required": false},
+        {"name": "chat", "type": "bool", "label": "Chat template", "description": "wrap prompts as <|prompt|> ... <|response|>, for instruction-tuned checkpoints", "widget": "bool", "default": true, "required": false},
+        {"name": "max_new_tokens", "type": "int", "label": "Max new tokens", "widget": "int", "default": 150, "min": 1, "max": 4096, "required": false},
+        {"name": "temperature", "type": "float", "label": "Temperature", "widget": "float", "default": 0.7, "min": 0, "max": 2, "step": 0.05, "required": false},
+        {"name": "top_p", "type": "float", "label": "Top p", "widget": "float", "default": 0.9, "min": 0, "max": 1, "step": 0.01, "required": false},
+        {"name": "top_k", "type": "int", "label": "Top k", "widget": "int", "default": 0, "min": 0, "required": false},
+        {"name": "min_p", "type": "float", "label": "Min p", "widget": "float", "default": 0.05, "min": 0, "max": 1, "step": 0.01, "required": false},
+        {"name": "repetition_penalty", "type": "float", "label": "Repetition penalty", "widget": "float", "default": 1.2, "min": 1, "max": 3, "step": 0.05, "required": false},
+        {"name": "seed", "type": "int", "label": "Seed", "description": "-1 for no fixed seed", "widget": "int", "default": -1, "required": false},
+        {"name": "device", "type": "str", "label": "Device", "widget": "select", "options": ["auto", "cpu", "cuda"], "default": "auto", "required": false},
+        {"name": "timeout_seconds", "type": "int", "label": "Timeout (s)", "description": "fail the node if generation takes longer; the job keeps its output. At most 280", "widget": "int", "default": 240, "min": 10, "max": 280, "required": false}
+      ],
+      "outputs": [
+        {"name": "text", "type": "str", "description": "the first completion"},
+        {"name": "texts", "type": "list[str]", "description": "every completion, in prompt order"},
+        {"name": "results", "type": "any", "description": "[{prompt, completion, n_tokens}], ready for Lloom Judge"},
+        {"name": "checkpoint", "type": "str", "description": "the checkpoint that answered"}
+      ],
+      "effects": "executes",
+      "calls_model": true,
+      "doc": {
+        "what": "Generates text from a trained Lloom model.",
+        "how": "Runs scripts/generate.py in the workspace with the prompts and sampling settings, loading the checkpoint on the chosen device, and answers with the completions. Fails when the run has no finished checkpoint or the tokenizer is missing.",
+        "why": "Seeing what a checkpoint writes, and handing it to a judge, is how a training run is evaluated beyond its loss.",
+        "best_uses": ["Sampling a checkpoint for a judge to grade", "Smoke-testing a run as soon as it finishes", "Comparing two runs on the same prompts"]
+      }
+    },
+    {
+      "id": "judge_request",
+      "title": "Lloom Judge Request",
+      "category": "lloom",
+      "description": "Builds the request that has a model grade responses against a rubric: the instructions, the prompt (every item numbered) and the JSON schema of the answer. Wire them into HollowDeck's Structured node with whatever Model node you judge with (a local Ollama model, or any provider HollowDeck has), then its data into Lloom Judge Scores. Calls no model itself.",
+      "inputs": [
+        {"name": "items", "type": "any", "label": "Items", "description": "a list of {prompt, response, reference?} objects; Lloom Generate's results fit", "widget": "json", "default": [], "required": false},
+        {"name": "prompt", "type": "str", "label": "Prompt", "description": "a single item's task", "widget": "text", "default": "", "required": false},
+        {"name": "response", "type": "str", "label": "Response", "description": "a single item's response to grade", "widget": "text", "default": "", "required": false},
+        {"name": "reference", "type": "str", "label": "Reference", "description": "a single item's reference answer, if any", "widget": "text", "default": "", "required": false},
+        {"name": "rubric", "type": "str", "label": "Rubric", "description": "what a good response does; empty uses the workspace's config/judge_config.yaml, else a general rubric", "widget": "text", "default": "", "required": false},
+        {"name": "max_score", "type": "int", "label": "Max score", "widget": "int", "default": 10, "min": 1, "max": 100, "required": false},
+        {"name": "max_items", "type": "int", "label": "Max items", "widget": "int", "default": 50, "min": 1, "max": 200, "required": false}
+      ],
+      "outputs": [
+        {"name": "instructions", "type": "str", "description": "for the Structured node's instructions: the grader's role, the scale and the rubric"},
+        {"name": "prompt", "type": "str", "description": "for the Structured node's prompt: every item, numbered"},
+        {"name": "schema", "type": "str", "description": "for the Structured node's schema: {verdicts: [{item, score, justification}]}"},
+        {"name": "items", "type": "any", "description": "the items as graded, for Lloom Judge Scores"},
+        {"name": "count", "type": "int", "description": "how many items the request grades"}
+      ],
+      "effects": "none",
+      "doc": {
+        "what": "Writes the grading request for an LLM judge, without calling a model.",
+        "how": "Normalises the items (prompt/question, response/completion/generated, reference/answer), numbers them, and writes instructions carrying the rubric and the 0..max_score scale, a prompt holding every item, and the JSON schema the answer must follow.",
+        "why": "Which model judges, and where it runs, is HollowDeck's to decide - a Model node - so the same judging works with a local model today and any provider HollowDeck adds later.",
+        "best_uses": ["Grading a checkpoint's generations with a local Ollama model", "Comparing runs on one rubric with one grader", "Swapping the grader by changing only the Model node"]
+      }
+    },
+    {
+      "id": "judge_scores",
+      "title": "Lloom Judge Scores",
+      "category": "lloom",
+      "description": "Reads a grader's answer back: matches each verdict to its item by number, clamps the scores, and gives the mean, the pass rate and a one-line summary. With a run name it also saves the result into the run (runs/<run>/eval/judge_results.json and judgements.jsonl), where Lloom Run Metrics and the Library show it. Calls no model.",
+      "inputs": [
+        {"name": "verdicts", "type": "any", "label": "Verdicts", "description": "the Structured node's data (or its text): {verdicts: [{item, score, justification}]}", "widget": "json", "default": {}},
+        {"name": "items", "type": "any", "label": "Items", "description": "Lloom Judge Request's items", "widget": "json", "default": []},
+        {"name": "max_score", "type": "int", "label": "Max score", "description": "the same scale the request used", "widget": "int", "default": 10, "min": 1, "max": 100, "required": false},
+        {"name": "pass_threshold", "type": "float", "label": "Pass at", "description": "a score at or above this passes; -1 for no pass rate", "widget": "float", "default": 7, "required": false},
+        {"name": "provider", "type": "str", "label": "Provider", "description": "the grader's provider, for the record (wire the Structured node's provider)", "widget": "string", "default": "", "required": false},
+        {"name": "model", "type": "str", "label": "Model", "description": "the grader's model, for the record (wire the Structured node's model)", "widget": "string", "default": "", "required": false},
+        {"name": "run_name", "type": "str", "label": "Save to run", "description": "save the result into this run's eval folder; empty saves nothing", "widget": "string", "default": "", "required": false}
+      ],
+      "outputs": [
+        {"name": "score", "type": "float", "description": "the mean score over the items that were scored"},
+        {"name": "pass_rate", "type": "float", "description": "the fraction of scored items at or above pass_threshold"},
+        {"name": "scores", "type": "list[float]", "description": "one score per item; null where the grader gave none"},
+        {"name": "verdicts", "type": "any", "description": "[{prompt, response, reference, score, justification, passed, error}]"},
+        {"name": "summary", "type": "str", "description": "the result as one line of text"},
+        {"name": "saved", "type": "str", "description": "the workspace-relative judge_results.json written, or empty"}
+      ],
+      "effects": "writes",
+      "doc": {
+        "what": "Scores a grader's answer and can save it into the run it judged.",
+        "how": "Parses the answer (a bundle, an object, a list or JSON text), pairs verdicts with items by number, reports any item left without a verdict, and averages. With run_name it writes judge_results.json and judgements.jsonl under runs/<run>/eval/, the same files scripts/judge.py writes.",
+        "why": "A judged score belongs with the run it describes, beside its loss and perplexity, whichever model did the grading.",
+        "best_uses": ["Recording a judged score on every finetune", "Gating a release on a minimum score", "Reporting the worst-scored answers from verdicts"]
+      }
+    },
+    {
+      "id": "add_sft_data",
+      "title": "Add Lloom SFT Data",
+      "category": "lloom",
+      "description": "Writes prompt/response pairs into the workspace as JSONL: data/sft/<dataset>.jsonl for training, or data/test/<dataset>.jsonl for held-out evaluation. Appends by default; replace overwrites the file and is refused unless the module setting allow_replace_data is true.",
+      "inputs": [
+        {"name": "pairs", "type": "any", "label": "Pairs", "description": "a list of {prompt, response} objects, or JSONL text", "widget": "json", "default": [], "required": false},
+        {"name": "prompt", "type": "str", "label": "Prompt", "description": "a single pair's prompt", "widget": "text", "default": "", "required": false},
+        {"name": "response", "type": "str", "label": "Response", "description": "a single pair's response", "widget": "text", "default": "", "required": false},
+        {"name": "dataset", "type": "str", "label": "Dataset", "description": "the file name without .jsonl: letters, digits, _ and -", "widget": "string", "default": "orchestrator", "required": false},
+        {"name": "split", "type": "str", "label": "Split", "description": "train writes data/sft/, test writes data/test/ (held out from training)", "widget": "select", "options": ["train", "test"], "default": "train", "required": false},
+        {"name": "mode", "type": "str", "label": "Mode", "widget": "select", "options": ["append", "replace"], "default": "append", "required": false}
+      ],
+      "outputs": [
+        {"name": "path", "type": "str", "description": "the workspace-relative file written"},
+        {"name": "added", "type": "int", "description": "pairs written by this call"},
+        {"name": "skipped", "type": "int", "description": "items without both a prompt and a response"},
+        {"name": "total", "type": "int", "description": "pairs in the file now"}
+      ],
+      "effects": "writes",
+      "doc": {
+        "what": "Adds instruction pairs to a Lloom SFT dataset.",
+        "how": "Normalises each item to {prompt, response} (instruction/question and output/answer are accepted too), drops items missing either, and appends them as JSON lines to the dataset file in the workspace. Replace is refused unless the module's allow_replace_data setting is on.",
+        "why": "Finetuning data can come from anywhere a graph reaches - a model writing examples, a file, a web page - and has to land where the SFT stage reads it.",
+        "best_uses": ["Building a synthetic instruction set with a model, then finetuning on it", "Keeping a held-out test set for the judge"]
+      }
+    },
+    {
+      "id": "sync_library",
+      "title": "Sync Lloom Library",
+      "category": "lloom",
+      "description": "Re-reads the workspace and republishes its recipes, presets, stage scripts, runs and checkpoints as assets in HollowDeck's Asset Library, and rewrites this module's per-recipe pipeline nodes. Writes only into the module's own data folder. Also happens when the module starts and when a job ends.",
+      "inputs": [],
+      "outputs": [
+        {"name": "created", "type": "int", "description": "assets added"},
+        {"name": "updated", "type": "int", "description": "assets changed"},
+        {"name": "removed", "type": "int", "description": "assets whose source is gone"},
+        {"name": "assets", "type": "list[str]", "description": "every asset this sync maintains"},
+        {"name": "summary", "type": "str", "description": "what changed, as a line of text"}
+      ],
+      "effects": "writes",
+      "doc": {
+        "what": "Publishes the workspace's resources to the Asset Library.",
+        "how": "Scans config/pipelines, config/presets, scripts/ and runs/, and writes one asset per resource into the module's asset store, removing assets whose resource is gone. Assets someone created by hand are left alone.",
+        "why": "Other modules and graphs find Lloom's recipes, presets and trained checkpoints through the Library rather than by knowing its folders.",
+        "best_uses": ["Refreshing the Library after editing recipes by hand", "Making a new checkpoint referenceable from a graph right away"]
+      }
+    }
+  ],
+  "requires": ["fastapi>=0.110", "uvicorn>=0.29", "pyyaml>=6.0"],
+  "depends": {},
+  "accepts": [],
+  "license": "Apache-2.0",
+  "authors": ["Devon Juvinall"],
+  "homepage": "https://github.com/djuvinall/Lloom",
+  "keywords": ["llm", "training", "finetuning", "evaluation", "pytorch"],
+  "enabled_by_default": true,
+  "provenance": "custom",
+  "function": "panel",
+  "api_version": 1
+}

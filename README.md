@@ -60,9 +60,9 @@ each piece.
 
 **Quantization** (`lloom.quant`) — dynamic int8.
 
-**Eval** (`lloom.eval`) — perplexity, embeddings, retrieval (MRR/NDCG), clustering, and a unified `Evaluator`.
+**Eval** (`lloom.eval`) — perplexity, embeddings, retrieval (MRR/NDCG), clustering, and a unified `Evaluator`. Plus LLM-as-judge (`lloom.judge`, `scripts/judge.py`): grade generations against a rubric with Claude or a local Ollama model.
 
-**Automation** (`lloom.config`, `lloom.pipeline`) — config merge `base < preset < --set` with a resolved snapshot per run, and a YAML pipeline runner to chain stages.
+**Automation** (`lloom.config`, `lloom.pipeline`) — config merge `base < preset < --set` with a resolved snapshot per run, and a YAML pipeline runner to chain stages. Lloom also ships as a [HollowDeck module](#run-it-from-hollowdeck), so graphs can train, wait, generate and judge.
 
 ## Install
 
@@ -109,6 +109,14 @@ python scripts/run_pipeline.py --pipeline config/pipelines/pretrain.yaml
 # a different model, kept side by side (artifacts land in runs/<run-name>/):
 python scripts/run_pipeline.py --pipeline config/pipelines/pretrain.yaml \
     --preset large --set training.optimizer=muon --run-name large-muon
+```
+
+For a one-minute CPU check of the whole machinery that keeps every artifact under
+`runs/` (so it never leaves a toy tokenizer in the shared `checkpoints/tokenizer/`):
+
+```bash
+python scripts/run_pipeline.py --pipeline config/pipelines/smoke.yaml --run-name smoke
+python scripts/run_pipeline.py --pipeline config/pipelines/smoke_sft.yaml --run-name smoke
 ```
 
 Or run the stages by hand:
@@ -188,8 +196,9 @@ config/
   training_config.yaml  data_config.yaml  sft_config.yaml
   eval_config.yaml      tokenizer_config.yaml
   presets/            model-size presets (nano ... xl, moe)
-  pipelines/          multi-stage recipes (pretrain, sft, release)
-scripts/            thin CLI entry points, Stages 0-5 (+ plot_loss.py viz helper)
+  pipelines/          multi-stage recipes (pretrain, sft, release, smoke, smoke_sft)
+  smoke/              data + tokenizer configs that keep the smoke recipes under runs/_smoke/
+scripts/            thin CLI entry points, Stages 0-5 (+ generate.py, judge.py, plot_loss.py)
 textlm/             project layer: data prep (prep.py) + SFT templating (sft.py)
 docs/               ARCHITECTURE.md (design rationale) + assets/
 data/
@@ -197,7 +206,8 @@ data/
   sft/              instruction data, *.jsonl (sample.jsonl included)
   test/             optional held-out eval data; evaluate.py prefers it over sft/
 runs/               per-run outputs: runs/<run_name>/{checkpoints,logs,eval} (gitignored)
-tests/              test_lloom.py (framework units) + test_scripts_smoke.py (CLI e2e)
+hollowdeck/         the HollowDeck module (hollowdeck/lloom) + its README
+tests/              framework units, CLI e2e smoke, judge, HollowDeck module contract
 ```
 
 ## Tests
@@ -218,6 +228,26 @@ python tests/test_scripts_smoke.py    # full CLI pipeline on a tiny corpus (need
 - Put instruction data in `data/sft/*.jsonl` as `{"prompt": ..., "response": ...}` (aliases `instruction`/`input` and `output`/`answer` are accepted). For trustworthy generation/retrieval/clustering scores, put a held-out split in `data/test/*.jsonl` — `evaluate.py` prefers it and warns when it has to fall back to training data.
 - Customize `textlm/prep.py` (text normalization / document splitting) and `textlm/sft.py` (prompt template) for your domain. The scripts and `lloom` don't change.
 - Match `tokenizer_config.yaml`'s `vocab_size` to your corpus size.
+
+## Run it from HollowDeck
+
+[HollowDeck](https://github.com/djuvinall/Orchestrator) is a desktop shell whose
+Orchestrator runs node graphs. `hollowdeck/lloom` makes Lloom one of its modules: every
+pipeline recipe and stage script becomes a node that starts a background job, with
+nodes to wait on it, read its metrics, generate from its checkpoint, and judge the
+output; the workspace's recipes, presets, runs and checkpoints appear in HollowDeck's
+Asset Library.
+
+```bash
+hollowdeck modules pack hollowdeck/lloom -o hollowdeck/dist/lloom.hmod
+hollowdeck modules install hollowdeck/dist/lloom.hmod --checksum <sha256 it printed>
+```
+
+Then set the module's `workspace` (this folder) and `python` (an interpreter with
+torch). Judging uses HollowDeck's own model nodes — Lloom writes the grading request and
+reads the verdicts, and the Model node you wire in decides who grades. See
+[hollowdeck/README.md](hollowdeck/README.md) for settings, the nodes, long-running jobs
+and three ready-to-run example graphs.
 
 ## Status & roadmap
 

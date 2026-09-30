@@ -1,0 +1,17 @@
+# LoRA-finetune a smoke run (config/pipelines/smoke.yaml) on the bundled SFT sample, CPU,
+# then evaluate the merged model. Use the SAME --run-name as the smoke run:
+#   python scripts/run_pipeline.py --pipeline config/pipelines/smoke_sft.yaml --run-name smoke
+# Like smoke, it reads and writes only under runs/ (the smoke tokenizer in runs/_smoke/).
+name: smoke_sft
+stages:
+  - name: finetune_lora
+    cmd: [scripts/finetune_sft_lora.py, --set, tokenizer_dir=runs/_smoke/tokenizer,
+          --set, device=cpu, --set, training.epochs=2, --set, training.batch_size=4,
+          --set, training.warmup_steps=2, --set, logging.log_interval=5,
+          --set, evaluation.eval_interval=10]
+    pass_overrides: true
+  - name: evaluate
+    cmd: [scripts/evaluate.py, --checkpoint, "runs/${run_name}/checkpoints/sft_lora/merged.pt",
+          --data_config, config/smoke/data_config.yaml, --set, tokenizer_dir=runs/_smoke/tokenizer,
+          --set, device=cpu, --set, qa.max_new_tokens=32, --set, qa.max_pairs=8]
+    pass_overrides: true

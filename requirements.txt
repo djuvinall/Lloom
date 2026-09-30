@@ -16,3 +16,7 @@ safetensors>=0.4
 # Optional - inference server (lloom/infer/server.py); install via ".[serve]"
 # fastapi>=0.110
 # uvicorn>=0.29
+
+# Optional - LLM-as-judge with Claude (lloom/judge.py, scripts/judge.py); the ollama
+# provider needs nothing extra. Install via ".[judge]" or uncomment:
+# anthropic>=1.9

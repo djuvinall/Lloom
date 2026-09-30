@@ -1,0 +1,23 @@
+# Data config for the smoke recipe (config/pipelines/smoke.yaml): the same sources as
+# config/data_config.yaml, but every derived artifact goes under runs/_smoke/, so a
+# quick check never writes the shared data/processed/ a real run reads.
+raw_dir: data/raw
+text_dir: runs/_smoke/processed/text
+tokens_dir: runs/_smoke/processed/tokens
+ood_dir: data/ood
+sft_dir: data/sft
+test_dir: data/test
+
+sources:
+  - {name: sample, tier: top}
+
+split:
+  val_fraction: 0.25   # the bundled sample is small; hold out enough to validate on
+  seed: 42
+
+curriculum:
+  phases:
+    - {until: 1.0, weights: uniform}
+  divergence_alert: 0.5
+
+ood_files: []

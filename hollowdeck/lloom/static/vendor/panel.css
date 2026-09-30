@@ -1,0 +1,381 @@
+/* Dark Glass — panel / deck shell (P2)
+ *
+ * The one shell every information module wears. Consistency lives here; the contents
+ * specialize freely. Requires system/dist/darkglass.css.
+ *
+ * RULE: not one literal value in this file. Every declaration resolves to a --darkglass-*
+ * custom property. If something needed a literal, that is a missing token, not a
+ * licence to hard-code — that is the whole test this component exists to run.
+ *
+ * Layer is set by a modifier, never by taste (P5, three tiers):
+ *   .k-panel--dock          docked chrome     — matte, square (P6). Always matte.
+ *   .k-panel                panel             — matte, opaque, md radius
+ *   .k-panel--glass         panel             — glass, md radius. Opt-in, and only on a
+ *                                               view with a ground worth refracting.
+ *   .k-panel--float         floating          — glass, lg radius. Always glass.
+ *
+ * Glass over a flat surface is just a slightly different flat colour. If the view behind
+ * has no variation, use the matte panel — that is a rule, not a preference.
+ */
+
+.k-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+  isolation: isolate;
+  background: var(--darkglass-layer-panel-background);
+  border: var(--darkglass-dimension-border-hairline) solid var(--darkglass-layer-panel-border);
+  border-radius: var(--darkglass-layer-panel-radius);
+  box-shadow: var(--darkglass-layer-panel-shadow);
+  backdrop-filter: var(--darkglass-layer-panel-blur);
+  -webkit-backdrop-filter: var(--darkglass-layer-panel-blur);
+  color: var(--darkglass-text-secondary);
+  font-family: var(--darkglass-typography-family-sans);
+  font-size: var(--darkglass-typography-size-body);
+  line-height: var(--darkglass-typography-line-height-snug);
+  transition:
+    border-color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing),
+    background-color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing);
+}
+
+.k-panel--dock {
+  background: var(--darkglass-layer-dock-background);
+  border-color: var(--darkglass-layer-dock-border);
+  border-radius: var(--darkglass-layer-dock-radius);
+  box-shadow: var(--darkglass-layer-dock-shadow);
+  backdrop-filter: var(--darkglass-layer-dock-blur);
+  -webkit-backdrop-filter: var(--darkglass-layer-dock-blur);
+}
+
+.k-panel--float {
+  background: var(--darkglass-layer-float-background);
+  border-color: var(--darkglass-layer-float-border);
+  border-radius: var(--darkglass-layer-float-radius);
+  box-shadow: var(--darkglass-layer-float-shadow);
+  backdrop-filter: var(--darkglass-layer-float-blur);
+  -webkit-backdrop-filter: var(--darkglass-layer-float-blur);
+  position: relative;
+  isolation: isolate;
+}
+
+.k-panel--glass {
+  background: var(--darkglass-layer-panel-glass-background);
+  border-color: var(--darkglass-layer-panel-glass-border);
+  border-radius: var(--darkglass-layer-panel-glass-radius);
+  box-shadow: var(--darkglass-layer-panel-glass-shadow);
+  backdrop-filter: var(--darkglass-layer-panel-glass-blur);
+  -webkit-backdrop-filter: var(--darkglass-layer-panel-glass-blur);
+  position: relative;
+  isolation: isolate;
+}
+
+/* The texture that keeps the glass off Apple's look (P5). Every tier is glass now, so
+   every tier gets the grain; only the opacity differs. */
+.k-panel::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: var(--darkglass-layer-panel-noise);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3'/></filter><rect width='120' height='120' filter='url(%23n)'/></svg>");
+}
+
+.k-panel--dock::before  { opacity: var(--darkglass-layer-dock-noise); }
+.k-panel--glass::before { opacity: var(--darkglass-layer-panel-glass-noise); }
+.k-panel--float::before { opacity: var(--darkglass-layer-float-noise); }
+
+/* Seams come from the material, not the opaque border token — an opaque hairline over a
+   translucent surface reads as a printed line laid on top of the glass. */
+.k-panel > .k-panel__header { border-bottom-color: var(--darkglass-layer-panel-border); }
+.k-panel > .k-panel__footer { border-top-color: var(--darkglass-layer-panel-border); }
+
+.k-panel--dock > .k-panel__header { border-bottom-color: var(--darkglass-layer-dock-border); }
+.k-panel--dock > .k-panel__footer { border-top-color: var(--darkglass-layer-dock-border); }
+
+.k-panel--glass > .k-panel__header,
+.k-panel--float > .k-panel__header { border-bottom-color: var(--darkglass-layer-float-border); }
+
+.k-panel--glass > .k-panel__footer,
+.k-panel--float > .k-panel__footer { border-top-color: var(--darkglass-layer-float-border); }
+
+/* ---------------------------------------------------------------- header */
+
+.k-panel__header {
+  display: flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-4);
+  min-height: var(--darkglass-density-area-default);
+  padding: var(--darkglass-dimension-space-3) var(--darkglass-dimension-space-5);
+  border-bottom: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle);
+}
+
+.k-panel__icon {
+  flex: none;
+  color: var(--darkglass-text-accent);
+  display: inline-flex;
+}
+
+.k-panel__title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--darkglass-text-secondary);
+  font-size: var(--darkglass-type-panel-header-size);
+  font-weight: var(--darkglass-type-panel-header-weight);
+  letter-spacing: var(--darkglass-type-panel-header-tracking);
+  text-transform: uppercase;
+}
+
+.k-panel__action {
+  flex: none;
+  appearance: none;
+  border: var(--darkglass-dimension-border-hairline) solid transparent;
+  border-radius: var(--darkglass-dimension-radius-sm);
+  background: transparent;
+  color: var(--darkglass-text-tertiary);
+  font: inherit;
+  font-size: var(--darkglass-typography-size-caption);
+  padding: var(--darkglass-dimension-space-1) var(--darkglass-dimension-space-3);
+  cursor: pointer;
+  transition:
+    color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing),
+    background-color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing);
+}
+
+.k-panel__body {
+  padding: var(--darkglass-dimension-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--darkglass-dimension-space-5);
+}
+
+.k-panel__footer {
+  padding: var(--darkglass-dimension-space-3) var(--darkglass-dimension-space-5);
+  border-top: var(--darkglass-dimension-border-hairline) solid var(--darkglass-border-subtle);
+  color: var(--darkglass-text-tertiary);
+  font-size: var(--darkglass-typography-size-caption);
+}
+
+/* ---------------------------------------------------------------- states */
+
+/* Container hover is EDGE-ONLY. Two reasons, and the second is the real one:
+ *
+ * 1. A full-surface wash over translucent glass lifts the whole panel's luminance, which
+ *    reads as the panel switching on rather than as a pointer affordance.
+ * 2. A panel whose rows also hover would tint twice under one pointer — the container
+ *    wash and the row wash stack. One pointer position, one hover affordance. The
+ *    fine-grained target owns it; the container gets its edge.
+ */
+.k-panel[data-interactive]:hover {
+  border-color: var(--darkglass-border-strong);
+}
+
+.k-panel[data-interactive]:active {
+  border-color: var(--darkglass-border-focus);
+}
+
+.k-panel:focus-visible,
+.k-panel__action:focus-visible {
+  outline: var(--darkglass-dimension-border-focus) solid var(--darkglass-state-focus-ring);
+  outline-offset: var(--darkglass-dimension-space-1);
+}
+
+.k-panel__action:hover {
+  color: var(--darkglass-text-primary);
+  background: var(--darkglass-state-hover);
+}
+
+.k-panel[aria-selected="true"] {
+  background: var(--darkglass-state-selected);
+  border-color: var(--darkglass-border-focus);
+}
+
+.k-panel[aria-disabled="true"] {
+  color: var(--darkglass-text-disabled);
+  pointer-events: none;
+}
+
+.k-panel[aria-disabled="true"] .k-panel__title,
+.k-panel[aria-disabled="true"] .k-panel__icon {
+  color: var(--darkglass-text-disabled);
+}
+
+.k-panel[data-status="error"] {
+  border-color: var(--darkglass-border-error);
+}
+
+.k-panel[data-status="error"] .k-panel__icon {
+  color: var(--darkglass-text-error);
+}
+
+/* loading — one shimmer, budgeted (P9) */
+
+.k-panel[data-status="loading"] .k-panel__body {
+  position: relative;
+  overflow: hidden;
+}
+
+.k-skeleton {
+  height: var(--darkglass-dimension-space-4);
+  border-radius: var(--darkglass-dimension-radius-sm);
+  background: var(--darkglass-surface-base);
+  position: relative;
+  overflow: hidden;
+}
+
+.k-skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, var(--darkglass-state-active), transparent);
+  animation: k-shimmer var(--darkglass-motion-duration-deliberate) var(--darkglass-transition-state-easing) infinite;
+}
+
+@keyframes k-shimmer {
+  from { transform: translateX(-100%); }
+  to   { transform: translateX(100%); }
+}
+
+/* empty */
+
+.k-panel__empty {
+  color: var(--darkglass-text-tertiary);
+  font-size: var(--darkglass-typography-size-caption);
+  text-align: center;
+  padding: var(--darkglass-dimension-space-7) var(--darkglass-dimension-space-5);
+}
+
+/* ---------------------------------------------------------------- rows (P4)
+ * One density per area. Every row in an area obeys it. */
+
+.k-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.k-row {
+  display: flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-4);
+  min-height: var(--darkglass-density-area-default);
+  padding: 0 var(--darkglass-dimension-space-2);
+  border-radius: var(--darkglass-dimension-radius-sm);
+  transition: background-color var(--darkglass-transition-state-duration) var(--darkglass-transition-state-easing);
+}
+
+.k-rows[data-density="dense"] .k-row    { min-height: var(--darkglass-density-area-dense); }
+.k-rows[data-density="relaxed"] .k-row  { min-height: var(--darkglass-density-area-relaxed); }
+
+.k-row:hover { background: var(--darkglass-state-hover); }
+
+.k-row[aria-selected="true"] {
+  background: var(--darkglass-state-selected);
+  color: var(--darkglass-text-primary);
+}
+
+.k-row__label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: var(--darkglass-type-row-label-size);
+  font-weight: var(--darkglass-type-row-label-weight);
+}
+
+.k-row__value {
+  flex: none;
+  color: var(--darkglass-text-primary);
+  font-size: var(--darkglass-type-row-value-size);
+  font-weight: var(--darkglass-type-row-value-weight);
+  font-variant-numeric: tabular-nums;
+}
+
+.k-caption {
+  color: var(--darkglass-text-tertiary);
+  font-size: var(--darkglass-type-caption-size);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------------------------------------------------------------- meter
+ * The ref13 budget bar, rebuilt. Fill colour comes from a category slot, so the
+ * same component works in a product where slot 3 means something else (P7). */
+
+.k-meter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--darkglass-dimension-space-1);
+}
+
+.k-meter__track {
+  height: var(--darkglass-dimension-space-3);
+  background: var(--darkglass-meter-track);
+  border-radius: var(--darkglass-dimension-radius-pill);
+  overflow: hidden;
+}
+
+/* One ramp for every bar. The fill carries no meaning, so it must not vary per row (P1)
+   — varying it would assert a category difference the data doesn't have. The drift is
+   ambient-class motion: 200% of the track width, easing back and forth slowly enough
+   that it reads as a surface rather than an animation. */
+.k-meter__fill {
+  height: 100%;
+  border-radius: var(--darkglass-dimension-radius-pill);
+  background-image: linear-gradient(
+    90deg,
+    var(--darkglass-meter-from),
+    var(--darkglass-meter-to),
+    var(--darkglass-meter-from)
+  );
+  background-size: 200% 100%;
+  background-position: 0% 50%;
+  animation: k-meter-drift var(--darkglass-ambient-duration) var(--darkglass-ambient-easing) infinite alternate;
+  transition: width var(--darkglass-transition-layout-duration) var(--darkglass-transition-layout-easing);
+}
+
+@keyframes k-meter-drift {
+  from { background-position: 0% 50%; }
+  to   { background-position: 100% 50%; }
+}
+
+/* Opt-in only: a meter that genuinely encodes a category binds a field slot and gives up
+   the gradient. Rare — most meters are quantities, not categories. */
+.k-meter[data-slot="1"] .k-meter__fill { background-image: none; background-color: var(--darkglass-field-slot1); animation: none; }
+.k-meter[data-slot="2"] .k-meter__fill { background-image: none; background-color: var(--darkglass-field-slot2); animation: none; }
+.k-meter[data-slot="3"] .k-meter__fill { background-image: none; background-color: var(--darkglass-field-slot3); animation: none; }
+.k-meter[data-slot="4"] .k-meter__fill { background-image: none; background-color: var(--darkglass-field-slot4); animation: none; }
+.k-meter[data-slot="5"] .k-meter__fill { background-image: none; background-color: var(--darkglass-field-slot5); animation: none; }
+.k-meter[data-slot="6"] .k-meter__fill { background-image: none; background-color: var(--darkglass-field-slot6); animation: none; }
+
+/* Over budget is a real semantic difference, so it is allowed to look different. */
+.k-meter[data-over="true"] .k-meter__fill {
+  background-image: none;
+  background-color: var(--darkglass-meter-over);
+  animation: none;
+}
+
+/* ---------------------------------------------------------------- badge */
+
+.k-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-1);
+  padding: 0 var(--darkglass-dimension-space-3);
+  border-radius: var(--darkglass-dimension-radius-pill);
+  border: var(--darkglass-dimension-border-hairline) solid currentColor;
+  font-size: var(--darkglass-typography-size-micro);
+  font-weight: var(--darkglass-typography-weight-medium);
+  letter-spacing: var(--darkglass-typography-tracking-wide);
+  text-transform: uppercase;
+  color: var(--darkglass-text-tertiary);
+}
+
+.k-badge[data-tone="success"] { color: var(--darkglass-text-success); }
+.k-badge[data-tone="warning"] { color: var(--darkglass-text-warning); }
+.k-badge[data-tone="error"]   { color: var(--darkglass-text-error); }
+.k-badge[data-tone="accent"]  { color: var(--darkglass-text-accent); }

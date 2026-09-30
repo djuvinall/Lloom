@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Lloom</title>
+  <!-- Every URL on this page is relative, and carries the static/ prefix even though
+       this file sits in static/: it is SERVED at the module root. The same file must
+       work at / standalone and at /m/lloom/ hosted (INTEROP.md sections 5 and 7). -->
+  <link rel="stylesheet" href="static/vendor/darkglass.css">
+  <link rel="stylesheet" href="static/vendor/panel.css">
+  <link rel="stylesheet" href="static/vendor/module.css">
+  <link rel="stylesheet" href="static/app.css">
+</head>
+<body>
+  <main class="lloom-page">
+
+    <!-- Workspace: where Lloom is, what runs it, and whether that is healthy. -->
+    <section class="k-panel" id="overview" data-status="loading">
+      <header class="k-panel__header">
+        <span class="k-panel__title" data-view-title>Lloom</span>
+        <span class="k-badge" id="status" data-tone="accent">loading</span>
+      </header>
+      <div class="k-panel__body">
+        <div class="k-skeleton" id="overview-skeleton"></div>
+        <div class="diag error" id="overview-error" hidden>
+          <span>&#x2715;</span>
+          <div id="overview-error-text"></div>
+        </div>
+        <div class="lloom-empty" id="unconfigured" hidden>
+          <p class="empty-title">No Lloom workspace yet</p>
+          <p class="empty-hint" id="unconfigured-problem"></p>
+          <p class="empty-hint">In the module manager, open this module's settings and set
+            <code>workspace</code> to your Lloom project folder (the one holding
+            <code>scripts/</code> and <code>config/</code>) and <code>python</code> to the
+            interpreter you train with. Then reload the module.</p>
+        </div>
+        <div id="overview-body" hidden>
+          <div class="stat-strip lloom-stats">
+            <div class="stat"><div class="metric" id="stat-active">0</div><div class="label">Jobs in flight</div></div>
+            <div class="stat"><div class="metric" id="stat-runs">0</div><div class="label">Runs</div></div>
+            <div class="stat"><div class="metric" id="stat-recipes">0</div><div class="label">Recipes</div></div>
+            <div class="stat"><div class="metric" id="stat-assets">0</div><div class="label">Library assets</div></div>
+          </div>
+          <div class="k-rows" data-density="dense">
+            <div class="k-row">
+              <span class="k-row__label">Workspace</span>
+              <span class="k-row__value mono-sm lloom-long" id="ws-root">&ndash;</span>
+            </div>
+            <div class="k-row">
+              <span class="k-row__label">Interpreter</span>
+              <span class="k-row__value mono-sm lloom-long" id="ws-python">&ndash;</span>
+            </div>
+            <div class="k-row">
+              <span class="k-row__label">Environment</span>
+              <span class="k-row__value lloom-long" id="ws-doctor">&ndash;</span>
+            </div>
+            <div class="k-row">
+              <span class="k-row__label">Library</span>
+              <span class="k-row__value lloom-long" id="ws-library">&ndash;</span>
+            </div>
+          </div>
+          <div class="diag warning" id="doctor-problem" hidden>
+            <span>!</span>
+            <div id="doctor-problem-text"></div>
+          </div>
+          <p class="pane-hint" id="judge-note">Lloom calls no model itself. To judge outputs,
+            a graph wires <b>Lloom Judge Request</b> into HollowDeck's <b>Structured</b> node
+            with any <b>Model</b> node, and its answer into <b>Lloom Judge Scores</b>.</p>
+        </div>
+      </div>
+      <footer class="k-panel__footer">
+        <button class="btn" id="refresh" type="button" data-hdeck-focus-first>Refresh</button>
+        <button class="btn" id="doctor" type="button">Check interpreter</button>
+        <button class="btn" id="sync" type="button">Sync library</button>
+      </footer>
+    </section>
+
+    <!-- Start a job: a recipe, or one stage. The same call a graph makes. -->
+    <section class="k-panel" id="launch" hidden>
+      <header class="k-panel__header">
+        <span class="k-panel__title">Start a job</span>
+      </header>
+      <div class="k-panel__body">
+        <form class="lloom-form" id="launch-form" autocomplete="off">
+          <div class="field-row">
+            <label for="mode">Run</label>
+            <select class="input" id="mode">
+              <option value="pipeline">a pipeline recipe</option>
+              <option value="stage">one stage</option>
+            </select>
+            <select class="input" id="recipe" aria-label="Recipe"></select>
+            <select class="input" id="stage" aria-label="Stage" hidden></select>
+          </div>
+          <div class="field-row">
+            <label for="run-name">Run name</label>
+            <input class="input" id="run-name" placeholder="default" spellcheck="false">
+            <label for="preset">Preset</label>
+            <select class="input" id="preset"></select>
+          </div>
+          <div class="field-row" id="checkpoint-row" hidden>
+            <label for="checkpoint">Checkpoint</label>
+            <input class="input grow" id="checkpoint" placeholder="the stage's default for the run"
+                   spellcheck="false">
+          </div>
+          <div class="field-row">
+            <label for="sets">Overrides</label>
+            <textarea class="input grow lloom-sets" id="sets" rows="2" spellcheck="false"
+                      placeholder="one per line, e.g. training.max_steps=200"></textarea>
+          </div>
+          <div class="field-row">
+            <label for="graph">Then run graph</label>
+            <input class="input" id="graph" placeholder="saved graph slug (optional)" spellcheck="false">
+            <label class="lloom-check" id="dry-run-row"><input type="checkbox" id="dry-run" aria-label="Dry run"> Dry run</label>
+          </div>
+          <div class="diag error" id="launch-error" hidden>
+            <span>&#x2715;</span>
+            <div id="launch-error-text"></div>
+          </div>
+        </form>
+      </div>
+      <footer class="k-panel__footer">
+        <button class="btn primary" id="start" type="submit" form="launch-form">Start</button>
+      </footer>
+    </section>
+
+    <!-- Jobs: live, with their output. -->
+    <section class="k-panel" id="jobs-panel" data-status="loading" hidden>
+      <header class="k-panel__header">
+        <span class="k-panel__title">Jobs</span>
+        <span class="k-badge" id="hold" data-tone="accent" hidden></span>
+      </header>
+      <div class="k-panel__body">
+        <div class="k-skeleton" id="jobs-skeleton"></div>
+        <div class="diag error" id="jobs-error" hidden>
+          <span>&#x2715;</span>
+          <div id="jobs-error-text"></div>
+        </div>
+        <div class="lloom-empty" id="jobs-empty" hidden>
+          <p class="empty-title">No jobs yet</p>
+          <p class="empty-hint">Start one above, or from a graph with a <b>Run Lloom Pipeline</b> node.</p>
+        </div>
+        <div class="table-wrap" id="jobs-wrap" hidden>
+          <table class="hdeck-table">
+            <thead><tr><th>Status</th><th>Job</th><th>Stage</th><th>Progress</th><th>When</th><th></th></tr></thead>
+            <tbody id="jobs"></tbody>
+          </table>
+        </div>
+        <div class="lloom-detail" id="job-detail" hidden>
+          <div class="field-row">
+            <b id="job-detail-title"></b>
+            <span class="mono-sm" id="job-detail-id"></span>
+            <span class="lloom-spacer"></span>
+            <button class="btn ghost" id="job-close" type="button">Close</button>
+          </div>
+          <p class="pane-hint" id="job-detail-meta"></p>
+          <pre class="lloom-log" id="job-log" tabindex="0" aria-label="Job output"></pre>
+        </div>
+      </div>
+    </section>
+
+    <!-- Runs: what training produced. -->
+    <section class="k-panel" id="runs-panel" data-status="loading" hidden>
+      <header class="k-panel__header">
+        <span class="k-panel__title">Runs</span>
+      </header>
+      <div class="k-panel__body">
+        <div class="k-skeleton" id="runs-skeleton"></div>
+        <div class="diag error" id="runs-error" hidden>
+          <span>&#x2715;</span>
+          <div id="runs-error-text"></div>
+        </div>
+        <div class="lloom-empty" id="runs-empty" hidden>
+          <p class="empty-title">No runs yet</p>
+          <p class="empty-hint">A pipeline writes its checkpoints and logs to
+            <code>runs/&lt;run name&gt;/</code>. Try the <b>pretrain</b> recipe with the
+            <b>nano</b> preset and <code>device=cpu</code> for a quick first run.</p>
+        </div>
+        <div class="table-wrap" id="runs-wrap" hidden>
+          <table class="hdeck-table">
+            <thead><tr><th>Run</th><th>Updated</th><th>Model</th><th>Best val loss</th><th>Val ppl</th><th>Judge</th></tr></thead>
+            <tbody id="runs"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="static/vendor/module.js"></script>
+  <script src="static/vendor/kit.js"></script>
+  <script src="static/app.js"></script>
+</body>
+</html>

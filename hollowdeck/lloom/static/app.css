@@ -1,0 +1,100 @@
+/* Lloom panel -- only what is this module's own. Everything generic (buttons, inputs,
+   tables, diagnostics, badges) comes from the vendored kit in static/vendor/.
+   RULE: no literal colours -- every colour is a var(--darkglass-*) token -- and no px
+   outside hairline borders, so the panel follows the shell's theme and its Resolution
+   Scale. */
+
+.lloom-page {
+  padding: var(--darkglass-dimension-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--darkglass-dimension-space-5);
+  min-height: 100%;
+}
+
+.lloom-stats {
+  margin-bottom: var(--darkglass-dimension-space-4);
+}
+
+.lloom-empty p {
+  margin: 0 0 0.5rem;
+}
+
+.lloom-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--darkglass-dimension-space-3);
+}
+
+.lloom-sets {
+  min-height: 3rem;
+  resize: vertical;
+  font-family: var(--darkglass-typography-family-mono);
+}
+
+.lloom-check {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--darkglass-dimension-space-2);
+}
+
+.lloom-spacer {
+  flex: 1;
+}
+
+.lloom-detail {
+  margin-top: var(--darkglass-dimension-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--darkglass-dimension-space-2);
+}
+
+.lloom-log {
+  margin: 0;
+  max-height: 22rem;
+  overflow: auto;
+  padding: var(--darkglass-dimension-space-3);
+  background: var(--darkglass-surface-sunken);
+  border: 1px solid var(--darkglass-border-subtle);
+  border-radius: var(--darkglass-dimension-radius-sm);
+  font-family: var(--darkglass-typography-family-mono);
+  font-size: var(--darkglass-typography-size-caption);
+  color: var(--darkglass-text-secondary);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.lloom-bar {
+  display: inline-block;
+  width: 5rem;
+  height: 0.375rem;
+  vertical-align: middle;
+  background: var(--darkglass-surface-sunken);
+  border-radius: var(--darkglass-dimension-radius-sm);
+  overflow: hidden;
+}
+
+.lloom-bar > span {
+  display: block;
+  height: 100%;
+  background: var(--darkglass-action-primary-rest);
+}
+
+.lloom-row-active td {
+  background: var(--darkglass-state-hover);
+}
+
+.lloom-num {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* Long row values (paths, environment and library summaries). The kit's k-row__value
+   is flex: none, sized for short values, so a long path pushed the page wider than its
+   area. This takes the room the row has left and wraps inside it instead. */
+.lloom-long {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}

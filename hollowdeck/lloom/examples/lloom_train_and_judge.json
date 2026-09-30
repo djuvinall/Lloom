@@ -1,0 +1,42 @@
+{
+  "name": "lloom train and judge",
+  "nodes": [
+    {"id": "1", "type": "lloom/run_pipeline", "title": "Train (smoke recipe: nano, CPU)", "values": {"recipe": "smoke", "run_name": "hd-smoke", "preset": "", "sets": [], "only": "", "from_stage": "", "until": "", "dry_run": false, "wait_seconds": 0, "on_complete_graph": "", "allow_unattended": true}, "pos": [40, 200]},
+    {"id": "2", "type": "zone/repeat_in", "title": "Wait for training", "values": {"zone_out": "4", "cap": 30}, "pos": [420, 200]},
+    {"id": "3", "type": "lloom/job_status", "title": "Job status (up to 4 min)", "values": {"wait_seconds": 240, "tail_lines": 5, "allow_unattended": true}, "pos": [720, 200]},
+    {"id": "4", "type": "zone/repeat_out", "title": "End wait", "values": {}, "pos": [1040, 200]},
+    {"id": "5", "type": "lloom/job_status", "title": "Final status", "values": {"wait_seconds": 0, "tail_lines": 20, "allow_unattended": true}, "pos": [1320, 200]},
+    {"id": "6", "type": "lloom/generate", "title": "Sample the model", "values": {"prompt": "", "prompts": ["The quick brown fox", "A quiet river", "In the ancient forest"], "checkpoint": "", "chat": false, "max_new_tokens": 40, "temperature": 0.7, "top_p": 0.9, "top_k": 0, "min_p": 0.05, "repetition_penalty": 1.2, "seed": 1, "device": "auto", "timeout_seconds": 240, "allow_unattended": true}, "pos": [1640, 80]},
+    {"id": "7", "type": "lloom/judge_request", "title": "Judge request", "values": {"rubric": "The model under test is tiny and was pretrained for a few minutes on a small corpus. The task is the prompt; the response continues it. Judge fluency and coherence of the continuation: real words, grammatical fragments and staying on the prompt's topic earn points; gibberish, repetition and empty output lose them. Do not judge factual accuracy.", "max_score": 10, "max_items": 10}, "pos": [1960, 80]},
+    {"id": "11", "type": "model/config", "title": "Grader model", "values": {"model": "ollama:qwen3.5:9b", "system": "", "temperature": 0.0, "max_tokens": 4000}, "pos": [1960, -160]},
+    {"id": "12", "type": "model/structured", "title": "Grade", "values": {}, "pos": [2280, 0]},
+    {"id": "13", "type": "lloom/judge_scores", "title": "Judge scores (saved to the run)", "values": {"max_score": 10, "pass_threshold": 5, "allow_unattended": true}, "pos": [2600, 80]},
+    {"id": "8", "type": "lloom/run_metrics", "title": "Run metrics", "values": {"phase": "pretrain", "allow_unattended": true}, "pos": [1640, 380]},
+    {"id": "9", "type": "str/format", "title": "Report", "values": {"template": "# Lloom run {run}\n\nTraining job: {status}\n\n```\n{metrics}\n```\n\nFirst sample: {sample}\n\n{judge}\n"}, "pos": [2920, 240]},
+    {"id": "10", "type": "core/sink", "title": "Report", "values": {"label": "report"}, "pos": [3240, 240]}
+  ],
+  "links": [
+    {"id": "1", "from_node": "1", "from_socket": "job_id", "to_node": "2", "to_socket": "initial"},
+    {"id": "2", "from_node": "2", "from_socket": "carry", "to_node": "3", "to_socket": "job_id"},
+    {"id": "3", "from_node": "3", "from_socket": "job_id", "to_node": "4", "to_socket": "carry"},
+    {"id": "4", "from_node": "4", "from_socket": "result", "to_node": "5", "to_socket": "job_id"},
+    {"id": "5", "from_node": "5", "from_socket": "run_name", "to_node": "6", "to_socket": "run_name"},
+    {"id": "6", "from_node": "6", "from_socket": "results", "to_node": "7", "to_socket": "items"},
+    {"id": "7", "from_node": "5", "from_socket": "run_name", "to_node": "8", "to_socket": "run_name"},
+    {"id": "8", "from_node": "5", "from_socket": "run_name", "to_node": "9", "to_socket": "run"},
+    {"id": "9", "from_node": "5", "from_socket": "status", "to_node": "9", "to_socket": "status"},
+    {"id": "10", "from_node": "8", "from_socket": "summary", "to_node": "9", "to_socket": "metrics"},
+    {"id": "11", "from_node": "13", "from_socket": "summary", "to_node": "9", "to_socket": "judge"},
+    {"id": "12", "from_node": "9", "from_socket": "text", "to_node": "10", "to_socket": "value"},
+    {"id": "13", "from_node": "6", "from_socket": "text", "to_node": "9", "to_socket": "sample"},
+    {"id": "14", "from_node": "11", "from_socket": "model", "to_node": "12", "to_socket": "model"},
+    {"id": "15", "from_node": "7", "from_socket": "instructions", "to_node": "12", "to_socket": "instructions"},
+    {"id": "16", "from_node": "7", "from_socket": "prompt", "to_node": "12", "to_socket": "prompt"},
+    {"id": "17", "from_node": "7", "from_socket": "schema", "to_node": "12", "to_socket": "schema"},
+    {"id": "18", "from_node": "12", "from_socket": "data", "to_node": "13", "to_socket": "verdicts"},
+    {"id": "19", "from_node": "7", "from_socket": "items", "to_node": "13", "to_socket": "items"},
+    {"id": "20", "from_node": "12", "from_socket": "provider", "to_node": "13", "to_socket": "provider"},
+    {"id": "21", "from_node": "12", "from_socket": "model", "to_node": "13", "to_socket": "model"},
+    {"id": "22", "from_node": "5", "from_socket": "run_name", "to_node": "13", "to_socket": "run_name"}
+  ]
+}

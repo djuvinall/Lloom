@@ -1,0 +1,34 @@
+# A quick end-to-end check: nano model, CPU, the bundled sample, a minute or two.
+#   python scripts/run_pipeline.py --pipeline config/pipelines/smoke.yaml --run-name smoke
+# Every artifact stays under runs/: the tokenizer and token streams in runs/_smoke/, the
+# model and its eval in runs/<run_name>/. Unlike the pretrain recipe it never writes the
+# shared data/processed/ or checkpoints/tokenizer/, which a real pretrain run skips
+# rebuilding whenever they exist. Overrides passed to the pipeline still win.
+name: smoke
+stages:
+  - name: prepare_data
+    cmd: [scripts/prepare_data.py, --config, config/smoke/data_config.yaml]
+  - name: train_tokenizer
+    cmd: [scripts/train_tokenizer.py, --config, config/smoke/tokenizer_config.yaml]
+  - name: tokenize_dataset
+    cmd: [scripts/tokenize_dataset.py, --config, config/smoke/data_config.yaml,
+          --tokenizer_dir, runs/_smoke/tokenizer]
+  - name: preflight
+    cmd: [scripts/preflight.py, --data_config, config/smoke/data_config.yaml,
+          --preset, nano, --set, tokenizer_dir=runs/_smoke/tokenizer, --set, device=cpu,
+          --set, model.max_seq_len=64]
+    pass_overrides: true
+  - name: pretrain
+    cmd: [scripts/pretrain.py, --data_config, config/smoke/data_config.yaml, --no_resume,
+          --preset, nano, --set, tokenizer_dir=runs/_smoke/tokenizer, --set, device=cpu,
+          --set, model.max_seq_len=64, --set, training.max_steps=150,
+          --set, training.batch_size=8, --set, training.grad_accum_steps=1,
+          --set, training.warmup_steps=10, --set, evaluation.eval_interval=25,
+          --set, evaluation.val_batches=2, --set, sampling.sample_interval=100000,
+          --set, checkpoint.save_interval=50, --set, logging.log_interval=10]
+    pass_overrides: true
+  - name: evaluate
+    cmd: [scripts/evaluate.py, --checkpoint, "runs/${run_name}/checkpoints/pretrain/best.pt",
+          --data_config, config/smoke/data_config.yaml, --set, tokenizer_dir=runs/_smoke/tokenizer,
+          --set, device=cpu, --set, qa.max_new_tokens=32, --set, qa.max_pairs=8]
+    pass_overrides: true

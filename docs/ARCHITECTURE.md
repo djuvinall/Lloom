@@ -159,6 +159,32 @@ override pass-through. `run_pipeline` resolves `run_name` once and forwards it t
 every stage, so a whole `pretrain → sft → release` sequence lands under one run
 directory.
 
+## The HollowDeck module
+
+`hollowdeck/lloom` exposes Lloom to [HollowDeck](https://github.com/djuvinall/Orchestrator)
+without the module server ever importing the framework. It is an orchestration layer:
+every capability is one of the workspace's own stage scripts, run as a child process
+under the workspace's interpreter with the workspace as its working directory —
+exactly how a person runs them. That keeps the server light (FastAPI, no torch) and
+keeps "what a stage does" defined in one place, the scripts.
+
+- **Jobs, not calls.** A tool call may wait about five minutes; training takes hours.
+  Pipelines and stages start as jobs (`jobs.py`): recorded on disk, logs captured,
+  stages and training progress parsed from the runner's own output, cancellable as a
+  whole process tree (a Windows job object / POSIX process group), and held alive
+  through HollowDeck's lifecycle hook while they run.
+- **The workspace is published, not hidden.** Recipes, presets, stage scripts, runs and
+  checkpoints are Asset Library assets whose payload names the value a node needs, and
+  each recipe also becomes its own node (via HollowDeck's `tools_file`) with the
+  workspace's presets and stages as choices.
+- **No model provider inside.** Judging is split at the model boundary: the module
+  writes the grading request (instructions, numbered items, JSON schema) and scores the
+  answer; HollowDeck's own Model and Structured nodes make the call. Which model grades,
+  and where it runs, is configured once in HollowDeck. `lloom.judge` and
+  `scripts/judge.py` remain the command-line judge.
+
+See `hollowdeck/README.md` for installation, settings and example graphs.
+
 ## Testing strategy
 
 Two suites, deliberately split:
@@ -170,4 +196,11 @@ Two suites, deliberately split:
   `nano` preset, in a throwaway copy of the repo. It catches the stage-wiring and
   path-handoff bugs that unit tests structurally can't see.
 
-CI runs both on Python 3.10–3.13 with CPU PyTorch, plus a ruff lint gate.
+`tests/test_judge.py` covers `lloom.judge` with a fake Claude client and a fake
+Ollama. `tests/test_hollowdeck_module.py` checks the module against HollowDeck's
+interop contract (guard modes, routes, relative URLs, UI-kit rules, byte-identical
+vendored files) and exercises it against a fake workspace that runs the real
+`run_pipeline.py` — jobs, cancellation, recovery, runs, generation, judging, SFT data,
+the Library and the recipe nodes — with fake HTTP servers standing in for the core.
+
+CI runs all of them on Python 3.10–3.13 with CPU PyTorch, plus a ruff lint gate.

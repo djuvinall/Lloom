@@ -1,0 +1,19 @@
+# Tokenizer config for the smoke recipe: trained into runs/_smoke/tokenizer, never the
+# shared checkpoints/tokenizer that a real pretrain run skips rebuilding once it exists.
+input_dir: runs/_smoke/processed/text
+model_dir: runs/_smoke/tokenizer
+model_prefix: spm
+vocab_size: 512             # sized for the small bundled sample; clamped if too high
+model_type: bpe
+character_coverage: 1.0
+byte_fallback: true
+seed: 42
+
+special_tokens:
+  - "<|endoftext|>"
+  - "<|pad|>"
+  - "<|mask|>"
+  - "<|prompt|>"
+  - "<|response|>"
+
+reserved_token_slots: 8
