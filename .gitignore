@@ -24,3 +24,6 @@ checkpoints/
 logs/
 wandb/
 nohup.out
+
+# HollowDeck module bundles (hollowdeck modules pack -> hollowdeck/dist/*.hmod)
+hollowdeck/dist/

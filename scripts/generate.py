@@ -16,6 +16,11 @@ Usage:
 --prompts_file takes a JSON list of strings or objects with a "prompt" key, or
 JSONL of the same. --chat wraps each prompt in the SFT template
 (<|prompt|> ... <|response|>) that instruction-tuned checkpoints expect.
+
+Tokenizer: --tokenizer_dir wins; otherwise the one the checkpoint was trained with,
+read from the config snapshot its trainer saved beside it
+(<checkpoint dir>/config_snapshot/resolved_config.yaml), and checkpoints/tokenizer
+when there is no snapshot.
 """
 import argparse
 import json
@@ -40,6 +45,18 @@ def resolve_checkpoint(checkpoint: str | None, run_name: str) -> Path:
             return base / rel
     sys.exit(f"run {run_name!r} has no finished checkpoint under {base} "
              f"(looked for {', '.join(CHECKPOINT_ORDER)}); pass --checkpoint")
+
+
+def resolve_tokenizer(ckpt: Path, tokenizer_dir: str | None,
+                      tokenizer_prefix: str | None) -> tuple[str, str]:
+    """The tokenizer the checkpoint was trained with, unless one is named."""
+    snapshot = ckpt.parent / "config_snapshot" / "resolved_config.yaml"
+    recorded: dict = {}
+    if snapshot.is_file():
+        import yaml
+        recorded = yaml.safe_load(snapshot.read_text(encoding="utf-8")) or {}
+    return (tokenizer_dir or recorded.get("tokenizer_dir") or "checkpoints/tokenizer",
+            tokenizer_prefix or recorded.get("tokenizer_prefix") or "spm")
 
 
 def read_prompts(args) -> list[str]:
@@ -69,8 +86,9 @@ def main():
     ap.add_argument("--prompts_file", default=None)
     ap.add_argument("--out", default=None, help="write the JSON here as well as stdout")
     ap.add_argument("--chat", action="store_true", help="wrap prompts in the SFT template")
-    ap.add_argument("--tokenizer_dir", default="checkpoints/tokenizer")
-    ap.add_argument("--tokenizer_prefix", default="spm")
+    ap.add_argument("--tokenizer_dir", default=None,
+                    help="default: the checkpoint's own (its config snapshot)")
+    ap.add_argument("--tokenizer_prefix", default=None)
     ap.add_argument("--device", default="auto", help="auto | cpu | cuda")
     ap.add_argument("--max_new_tokens", type=int, default=150)
     ap.add_argument("--temperature", type=float, default=0.7)
@@ -94,7 +112,7 @@ def main():
                           else ("cpu" if args.device == "auto" else args.device))
     started = time.time()
     model = load_model(ckpt, device)
-    tok = SPTokenizer(args.tokenizer_dir, args.tokenizer_prefix)
+    tok = SPTokenizer(*resolve_tokenizer(ckpt, args.tokenizer_dir, args.tokenizer_prefix))
     results = []
     for i, prompt in enumerate(prompts):
         text = sft_prompt(prompt) if args.chat else prompt

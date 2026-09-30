@@ -1,7 +1,7 @@
 {
   "name": "lloom train and judge",
   "nodes": [
-    {"id": "1", "type": "lloom/run_pipeline", "title": "Train (nano, CPU)", "values": {"recipe": "pretrain", "run_name": "hd-nano", "preset": "nano", "sets": ["device=cpu", "model.max_seq_len=64", "training.max_steps=200", "training.batch_size=8", "training.grad_accum_steps=1", "training.warmup_steps=10", "evaluation.eval_interval=50", "evaluation.val_batches=4", "sampling.sample_interval=1000", "checkpoint.save_interval=50", "logging.log_interval=10", "qa.max_new_tokens=32", "qa.max_pairs=8"], "only": "", "from_stage": "", "until": "", "dry_run": false, "wait_seconds": 0, "on_complete_graph": "", "allow_unattended": true}, "pos": [40, 200]},
+    {"id": "1", "type": "lloom/run_pipeline", "title": "Train (smoke recipe: nano, CPU)", "values": {"recipe": "smoke", "run_name": "hd-smoke", "preset": "", "sets": [], "only": "", "from_stage": "", "until": "", "dry_run": false, "wait_seconds": 0, "on_complete_graph": "", "allow_unattended": true}, "pos": [40, 200]},
     {"id": "2", "type": "zone/repeat_in", "title": "Wait for training", "values": {"zone_out": "4", "cap": 30}, "pos": [420, 200]},
     {"id": "3", "type": "lloom/job_status", "title": "Job status (up to 4 min)", "values": {"wait_seconds": 240, "tail_lines": 5, "allow_unattended": true}, "pos": [720, 200]},
     {"id": "4", "type": "zone/repeat_out", "title": "End wait", "values": {}, "pos": [1040, 200]},

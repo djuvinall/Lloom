@@ -6,6 +6,34 @@ to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **HollowDeck module** (`hollowdeck/lloom`, module version 0.1.2): Lloom's pipelines
+  and stages as HollowDeck tool nodes that start background jobs (queued behind a
+  concurrency limit, cancellable as a process tree, recovered as `interrupted` after a
+  restart), with nodes to wait on a job, read runs and metrics, generate from a
+  checkpoint, add SFT data, and judge outputs. One node per pipeline recipe with the
+  workspace's presets and stages as dropdowns; the workspace's recipes, presets, stage
+  scripts, runs and checkpoints published to HollowDeck's Asset Library; a panel with a
+  launcher, live job logs and runs; three example graphs. Judging calls no model from
+  Lloom: `judge_request` writes the grading request and `judge_scores` reads HollowDeck's
+  structured answer back and can save it into the run. Packs to a deterministic `.hmod`.
+- `lloom.judge` and `scripts/judge.py` (+ `config/judge_config.yaml`): LLM-as-judge over
+  a run's generations with Claude (the `judge` extra, `anthropic` SDK, refusal fallbacks
+  on) or a local Ollama model, writing `judgements.jsonl` and `judge_results.json`.
+- `scripts/generate.py`: batch generation from a checkpoint, JSON in and out; picks the
+  run's newest finished stage (SFT merged, SFT full, pretrain) when none is named, and
+  the tokenizer that checkpoint was trained with (from its config snapshot).
+- `smoke` and `smoke_sft` recipes (+ `config/smoke/`): a one-minute CPU run of the whole
+  pipeline on the bundled samples whose every artifact stays under `runs/`, so a quick
+  check never leaves a toy tokenizer in the shared `checkpoints/tokenizer/` that a real
+  `pretrain` run would then skip rebuilding.
+- Tests: `tests/test_judge.py`, `tests/test_hollowdeck_module.py`; the CLI smoke test now
+  also runs `generate.py` on the pretrain and SFT checkpoints.
+
+### Fixed
+- `generate.py` / `judge.py` no longer crash printing model output to a Windows console
+  whose code page cannot encode it.
+
 ## [0.2.0] - 2026-07-17
 
 ### Changed

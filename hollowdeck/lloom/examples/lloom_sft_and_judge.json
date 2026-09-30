@@ -1,7 +1,7 @@
 {
   "name": "lloom sft and judge",
   "nodes": [
-    {"id": "1", "type": "lloom/pipeline_sft", "title": "LoRA finetune (CPU)", "values": {"run_name": "hd-nano", "preset": "none", "sets": ["device=cpu", "training.epochs=2", "training.batch_size=4", "logging.log_interval=5", "evaluation.eval_interval=10", "qa.max_new_tokens=32", "qa.max_pairs=8"], "from_stage": "first", "until": "last", "only": "all", "dry_run": false, "wait_seconds": 0, "on_complete_graph": "", "allow_unattended": true}, "pos": [40, 200]},
+    {"id": "1", "type": "lloom/pipeline_smoke_sft", "title": "LoRA finetune the smoke run (CPU)", "values": {"run_name": "hd-smoke", "preset": "none", "sets": [], "from_stage": "first", "until": "last", "only": "all", "dry_run": false, "wait_seconds": 0, "on_complete_graph": "", "allow_unattended": true}, "pos": [40, 200]},
     {"id": "2", "type": "zone/repeat_in", "title": "Wait for finetuning", "values": {"zone_out": "4", "cap": 30}, "pos": [420, 200]},
     {"id": "3", "type": "lloom/job_status", "title": "Job status (up to 4 min)", "values": {"wait_seconds": 240, "tail_lines": 5, "allow_unattended": true}, "pos": [720, 200]},
     {"id": "4", "type": "zone/repeat_out", "title": "End wait", "values": {}, "pos": [1040, 200]},

@@ -407,6 +407,32 @@ def test_metrics_summary_reads_interleaved_rows(tmp_path):
     assert WS.metrics_summary(tmp_path / "missing.csv") is None
 
 
+def test_every_real_recipe_names_scripts_and_configs_that_exist():
+    # A recipe is the unit a graph starts; a typo in one fails only when someone runs it.
+    for recipe in WS.list_recipes(ROOT):
+        assert not recipe["problem"], recipe
+        for stage in recipe["stages"]:
+            assert (ROOT / stage["script"]).is_file(), (recipe["name"], stage["script"])
+            args = stage["args"]
+            for flag, value in zip(args, args[1:]):
+                if flag in ("--config", "--data_config", "--tokenizer_dir"):
+                    assert "${" in value or (ROOT / value).exists() or \
+                        value.startswith("runs/"), (recipe["name"], flag, value)
+
+
+def test_the_smoke_recipes_never_touch_shared_artifacts():
+    # The pretrain recipe skips rebuilding data/processed/ and checkpoints/tokenizer/
+    # when they exist, so a quick check must never write them.
+    for name in ("smoke", "smoke_sft"):
+        text = _read(ROOT / "config" / "pipelines" / f"{name}.yaml")
+        body = "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
+        assert "checkpoints/tokenizer" not in body and "data/processed" not in body, name
+    for rel in ("config/smoke/data_config.yaml", "config/smoke/tokenizer_config.yaml"):
+        for line in _read(ROOT / rel).splitlines():
+            if line.strip().startswith(("text_dir", "tokens_dir", "input_dir", "model_dir")):
+                assert "runs/_smoke/" in line, (rel, line)
+
+
 def test_real_workspace_inventory_reads():
     inv = WS.inventory(ROOT)
     names = {r["name"] for r in inv["recipes"]}
@@ -1147,7 +1173,11 @@ def test_panel_api_start_list_log_cancel(mod):
                                              "run_name": "ui", "dry_run": True})
     assert res.status_code == 201
     job_id = res.json()["job"]["id"]
-    assert mod.svc.jobs.wait(job_id, 60)["status"] == "succeeded"
+    done = mod.svc.jobs.wait(job_id, 60)
+    assert done["status"] == "succeeded"
+    # The runner's summary says what really happened: printed, not run.
+    assert [(s["name"], s["status"]) for s in done["stages"]] == \
+        [("prepare_data", "dry-run"), ("pretrain", "dry-run")]
     listing = mod.client.get("/api/jobs").json()
     assert listing["jobs"][0]["job_id"] == job_id and listing["jobs"][0]["params"]["source"] == "panel"
     log = mod.client.get(f"/api/jobs/{job_id}/log").json()

@@ -1,7 +1,7 @@
 {
   "id": "lloom",
   "name": "Lloom",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "description": "Train, finetune, evaluate and judge language models with Lloom from HollowDeck. Every tool runs one of the Lloom workspace's own stage scripts as a background job, so a graph can start a pipeline, wait on it, read its metrics, generate from the checkpoint it produced, and have a model grade the result. Lloom calls no model provider itself: judging is a request Lloom writes and HollowDeck's own model nodes carry out, with whichever model you pick. Publishes the workspace's recipes, presets, stage scripts, runs and checkpoints to the Asset Library.",
   "kind": "process",
   "command": ["{python}", "__main__.py"],

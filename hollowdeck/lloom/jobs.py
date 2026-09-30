@@ -45,6 +45,9 @@ TERMINAL = ("succeeded", "failed", "cancelled", "interrupted")
 
 _STAGE_START = re.compile(r"^\[([A-Za-z0-9_.\-]+)\] \$ ")
 _STAGE_SKIP = re.compile(r"^\[([A-Za-z0-9_.\-]+)\] skipped")
+# lloom.pipeline's closing table: "  <stage>  ok|skipped|dry-run|FAILED (n)  <seconds>s"
+_SUMMARY_ROW = re.compile(r"^\s+([A-Za-z0-9_.\-]+)\s+(ok|skipped|dry-run|FAILED \(-?\d+\))\s+[\d.]+s\s*$")
+_SUMMARY_STATUS = {"ok": "done", "skipped": "skipped", "dry-run": "dry-run", "FAILED": "failed"}
 _TOTAL = re.compile(r"^(?:training|sft): (\d+) steps")
 _STEP = re.compile(r"^step\s+(\d+) loss ([-+0-9.eE]+|nan|inf)")
 _VAL = re.compile(r"^\s+val ([-+0-9.eE]+|nan|inf)(?: ppl ([-+0-9.eE]+|nan|inf))?")
@@ -330,6 +333,19 @@ class JobManager:
             stages.append({"name": match.group(1), "status": "skipped",
                            "started_at": None, "finished_at": time.time()})
             return "stage"
+        if line.strip() == "=== pipeline summary ===":
+            rec["_summary"] = True
+            return ""
+        if rec.get("_summary"):
+            # The runner's own verdict per stage is the exact one: a dry run's stages
+            # were printed, never run, and must not read as done.
+            match = _SUMMARY_ROW.match(line)
+            if match:
+                status = _SUMMARY_STATUS.get(match.group(2).split(" ")[0], "done")
+                for stage in stages:
+                    if stage["name"] == match.group(1):
+                        stage["status"] = status
+                return "stage"
         progress = rec.get("progress") or {}
         match = _TOTAL.match(line)
         if match:
