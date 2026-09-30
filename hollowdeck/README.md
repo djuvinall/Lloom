@@ -140,8 +140,10 @@ module runs it only when a graph asks for the `judge` stage.
 
 ## Example graphs
 
-`hollowdeck/lloom/examples/` — copy one into `hollowdeck_data/graphs/` (it appears under
-the editor's *load…*) or drop the file on the HollowDeck window:
+`hollowdeck/lloom/examples/` — drop a file on the HollowDeck window to open it in the
+editor, then **Save** it (saved graphs live in `hollowdeck_data/graphs/` wrapped in the
+editor's own envelope, so copy them in through the editor, not by hand). From a script,
+`PUT /m/graph_editor/api/graphs/<slug>` with the file's contents saves it the same way:
 
 - **lloom_train_and_judge** — run the `smoke` recipe (nano, CPU, about a minute),
   wait, sample the model, have a Model node grade the samples, save the score into the
